@@ -63,18 +63,23 @@ console.log(`✅ Database: ${isPostgres ? "PostgreSQL" : "SQLite"} (connection c
 console.log(`✅ JWT_SECRET: configured`);
 console.log("");
 
+// Determine correct schema for database type
+const schemaFlag = isPostgres ? "--schema=prisma/schema-pg.prisma" : "";
+const schemaLabel = isPostgres ? "prisma/schema-pg.prisma" : "prisma/schema.prisma";
+console.log(`📋 Using schema: ${schemaLabel}`);
+
 // Step 2: Generate Prisma client
 console.log("📦 Generating Prisma client...");
-if (!run("npx prisma generate")) {
+if (!run(`npx prisma generate ${schemaFlag}`)) {
   process.exit(1);
 }
 console.log("");
 
 // Step 3: Apply migrations
 console.log("🔄 Applying database migrations...");
-if (!run("npx prisma migrate deploy")) {
+if (!run(`npx prisma migrate deploy ${schemaFlag}`)) {
   console.log("⚠️  migrate deploy failed, trying db push...");
-  if (!run("npx prisma db push")) {
+  if (!run(`npx prisma db push ${schemaFlag}`)) {
     console.error("❌ Database migration failed");
     process.exit(1);
   }
