@@ -12,7 +12,7 @@ if (!JWT_SECRET_RAW) {
 }
 const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_RAW);
 
-const PUBLIC_ROUTES = ["/login", "/api/health"];
+const PUBLIC_ROUTES = ["/login", "/api/health", "/api/diag"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
