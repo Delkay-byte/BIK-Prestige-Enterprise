@@ -1,0 +1,334 @@
+// BIK Prestige Enterprise Management Platform - Database Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================
+// SHARED / CORE
+// =====================
+
+model User {
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  fullName           String
+  phone              String?
+  role               String   @default("worker") // admin | worker | collector
+  status             String   @default("active")
+  passwordHash       String
+  forcePasswordReset Boolean  @default(false)
+  locationId         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  location      Location?     @relation(fields: [locationId], references: [id])
+  dailyAccounts DailyAccount[]
+  collector     Collector?
+
+  @@index([role])
+  @@index([status])
+  @@index([locationId])
+}
+
+model Location {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  description String?
+  address     String?
+  contactPhone String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users         User[]
+  dailyAccounts DailyAccount[]
+
+  @@index([status])
+  @@index([code])
+}
+
+model DailyAccount {
+  id                     String   @id @default(cuid())
+  locationId             String
+  workerId               String
+  businessDate           DateTime
+
+  openingMomoFloat       Decimal  @default(0)
+  openingCash            Decimal  @default(0)
+  totalCashIn            Decimal  @default(0)
+  totalCashOut           Decimal  @default(0)
+  totalCashReceived      Decimal  @default(0)
+  totalCashPaid          Decimal  @default(0)
+  commission             Decimal  @default(0)
+  otherIncome            Decimal  @default(0)
+  closingMomoFloat       Decimal  @default(0)
+  closingCash            Decimal  @default(0)
+  totalExpenses          Decimal  @default(0)
+  calculatedMomoVariance Decimal  @default(0)
+  calculatedCashVariance Decimal  @default(0)
+  reconciliationNote     String?
+
+  status                 String   @default("draft")
+  submittedAt            DateTime?
+  reviewedAt             DateTime?
+  reviewedBy             String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  location Location @relation(fields: [locationId], references: [id])
+  worker   User     @relation(fields: [workerId], references: [id])
+  expenses Expense[]
+
+  @@unique([locationId, businessDate])
+  @@index([businessDate])
+  @@index([locationId])
+  @@index([workerId])
+  @@index([status])
+  @@index([submittedAt])
+}
+
+model Expense {
+  id             String   @id @default(cuid())
+  dailyAccountId String
+  description    String
+  amount         Decimal
+  createdAt      DateTime @default(now())
+
+  dailyAccount DailyAccount @relation(fields: [dailyAccountId], references: [id], onDelete: Cascade)
+
+  @@index([dailyAccountId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  entityType String
+  entityId   String?
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// =====================
+// SUSU MODULE
+// =====================
+
+model Customer {
+  id           String   @id @default(cuid())
+  customerId   String   @unique // BIK-S-XXXXXX format, human-readable
+  fullName     String
+  phone        String?
+  address      String?
+  status       String   @default("active") // active | inactive
+  registeredAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  accounts     SusuAccount[]
+  assignments  CollectorCustomerAssignment[]
+
+  @@index([status])
+  @@index([customerId])
+  @@index([phone])
+}
+
+model SusuAccount {
+  id                String   @id @default(cuid())
+  accountId         String   @unique // BIK-S-XXXXXX card number
+  customerId        String
+  dailyContribution Decimal              // Customer's chosen daily contribution amount
+  status            String   @default("active") // active | inactive | closed
+  cardCustody       String   @default("customer") // customer | company | collector
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  customer          Customer                    @relation(fields: [customerId], references: [id])
+  cycles            SusuCycle[]
+  contributions     Contribution[]
+  withdrawals       Withdrawal[]
+  commissions       Commission[]
+  cardFees          CardFee[]
+  assignments       CollectorCustomerAssignment[]
+
+  @@index([customerId])
+  @@index([accountId])
+  @@index([status])
+}
+
+model SusuCycle {
+  id                  String   @id @default(cuid())
+  accountId           String
+  cycleNumber         Int                    // 1, 2, 3, ... per account
+  startDate           DateTime
+  endDate             DateTime
+  dailyContribution   Decimal                // Snapshot of contribution at cycle start
+  status              String   @default("active") // active | completed
+  commissionCharged   Boolean  @default(false) // Has first withdrawal commission been charged this cycle?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  account         SusuAccount          @relation(fields: [accountId], references: [id])
+  contributions   Contribution[]
+  withdrawals     Withdrawal[]
+  commissions     Commission[]
+
+  @@unique([accountId, cycleNumber])
+  @@index([accountId])
+  @@index([status])
+  @@index([startDate])
+}
+
+model Contribution {
+  id              String   @id @default(cuid())
+  accountId       String
+  cycleId         String
+  amount          Decimal               // Total amount collected in this event
+  collectionDate  DateTime
+  channel         String                // collector | direct_office
+  collectorId     String?               // Reference to Collector if collected via collector
+  recordedById    String                // User who recorded the payment
+  referenceId     String   @unique      // Idempotency key - prevents duplicate submissions
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  account     SusuAccount            @relation(fields: [accountId], references: [id])
+  cycle       SusuCycle              @relation(fields: [cycleId], references: [id])
+  collector   Collector?             @relation(fields: [collectorId], references: [id])
+  allocations ContributionAllocation[]
+
+  @@index([accountId])
+  @@index([cycleId])
+  @@index([collectionDate])
+  @@index([channel])
+  @@index([collectorId])
+  @@index([referenceId])
+}
+
+model ContributionAllocation {
+  id              String   @id @default(cuid())
+  contributionId  String
+  cycleDay        Int                // Which day in the cycle (1-31) this allocation covers
+  amount          Decimal            // Amount allocated to this day
+  createdAt       DateTime @default(now())
+
+  contribution Contribution @relation(fields: [contributionId], references: [id], onDelete: Cascade)
+
+  @@index([contributionId])
+  @@index([cycleDay])
+}
+
+model Withdrawal {
+  id              String   @id @default(cuid())
+  accountId       String
+  cycleId         String
+  requestedAmount Decimal              // What the customer asked to withdraw
+  commissionAmount Decimal @default(0) // Commission deducted (one-day contribution if first withdrawal)
+  netAmount       Decimal              // Amount actually paid to customer
+  remainingBalance Decimal             // Balance left after withdrawal
+  status          String   @default("completed") // completed | pending | rejected
+  authorizedById  String               // Admin who authorized
+  referenceId     String   @unique     // Idempotency key
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  account   SusuAccount @relation(fields: [accountId], references: [id])
+  cycle     SusuCycle   @relation(fields: [cycleId], references: [id])
+
+  @@index([accountId])
+  @@index([cycleId])
+  @@index([createdAt])
+  @@index([referenceId])
+}
+
+model Commission {
+  id          String   @id @default(cuid())
+  accountId   String
+  cycleId     String
+  amount      Decimal               // Equals one day's contribution
+  basis       String                // "one_day_contribution"
+  triggeredBy String                // "first_withdrawal"
+  recordedById String
+  createdAt   DateTime @default(now())
+
+  account SusuAccount @relation(fields: [accountId], references: [id])
+  cycle   SusuCycle   @relation(fields: [cycleId], references: [id])
+
+  @@index([accountId])
+  @@index([cycleId])
+}
+
+model CardFee {
+  id          String   @id @default(cuid())
+  accountId   String
+  amount      Decimal  @default(10) // GH₵10 card fee
+  recordedById String
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  account SusuAccount @relation(fields: [accountId], references: [id])
+
+  @@index([accountId])
+}
+
+model Collector {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  status    String   @default("active") // active | inactive
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user          User                              @relation(fields: [userId], references: [id])
+  assignments   CollectorCustomerAssignment[]
+  contributions Contribution[]
+  remittances   CollectorRemittance[]
+
+  @@index([status])
+}
+
+model CollectorCustomerAssignment {
+  id          String   @id @default(cuid())
+  collectorId String
+  customerId  String
+  accountId   String
+  assignedAt  DateTime @default(now())
+  active      Boolean  @default(true)
+
+  collector   Collector    @relation(fields: [collectorId], references: [id])
+  customer    Customer     @relation(fields: [customerId], references: [id])
+  account     SusuAccount  @relation(fields: [accountId], references: [id])
+
+  @@unique([collectorId, accountId])
+  @@index([collectorId])
+  @@index([customerId])
+  @@index([accountId])
+}
+
+model CollectorRemittance {
+  id              String   @id @default(cuid())
+  collectorId     String
+  expectedAmount  Decimal              // Sum of recorded collections
+  remittedAmount  Decimal              // Amount physically brought to office
+  variance        Decimal              // expected - remitted
+  status          String   @default("pending") // pending | reconciled | discrepancy
+  recordedById    String               // Admin who recorded
+  referenceId     String   @unique     // Idempotency key
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  collector Collector @relation(fields: [collectorId], references: [id])
+
+  @@index([collectorId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([referenceId])
+}

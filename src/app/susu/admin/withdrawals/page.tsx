@@ -1,0 +1,327 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { getWithdrawals, processWithdrawal } from "@/lib/actions/susu-withdrawal.actions";
+import { searchCustomers } from "@/lib/actions/susu-customer.actions";
+import { formatCedi, formatDateTime } from "@/lib/utils";
+
+interface WithdrawalRecord {
+  id: string;
+  requestedAmount: number;
+  commissionAmount: number;
+  netAmount: number;
+  remainingBalance: number;
+  status: string;
+  createdAt: Date;
+  notes?: string | null;
+  account: {
+    accountId: string;
+    customer: { customerId: string; fullName: string };
+  };
+  cycle: { cycleNumber: number };
+}
+
+interface CustomerSearchResult {
+  id: string;
+  customerId: string;
+  fullName: string;
+  accounts: Array<{
+    id: string;
+    accountId: string;
+    dailyContribution: number;
+    cycles: Array<{ id: string; status: string }>;
+  }>;
+}
+
+export default function SusuWithdrawalsPage() {
+  const [withdrawals, setWithdrawals] = useState<WithdrawalRecord[]>([]);
+  const [pagination, setPagination] = useState<{ page: number; totalPages: number; total: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [page, setPage] = useState(1);
+
+  // Withdrawal form
+  const [showForm, setShowForm] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<CustomerSearchResult[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchResult | null>(null);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    loadWithdrawals();
+  }, [page]);
+
+  async function loadWithdrawals() {
+    setLoading(true);
+    try {
+      const result = await getWithdrawals({ page, limit: 15 });
+      setWithdrawals(result.withdrawals as unknown as WithdrawalRecord[]);
+      setPagination(result.pagination);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSearch(query: string) {
+    setSearchQuery(query);
+    if (query.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    try {
+      const results = await searchCustomers(query);
+      setSearchResults(results as unknown as CustomerSearchResult[]);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function handleProcessWithdrawal() {
+    if (!selectedCustomer) return;
+    const account = selectedCustomer.accounts[0];
+    if (!account) {
+      setError("No active account found");
+      return;
+    }
+
+    const amountNum = parseFloat(withdrawAmount);
+    if (!amountNum || amountNum <= 0) {
+      setError("Please enter a valid withdrawal amount");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const result = await processWithdrawal({
+        accountId: account.id,
+        requestedAmount: amountNum,
+        notes: notes || undefined,
+      });
+
+      if (result.success) {
+        const data = result.data as { commissionAmount: number; netAmount: number };
+        setSuccess(
+          `Withdrawal processed: ${formatCedi(amountNum)}${data.commissionAmount > 0 ? ` (commission: ${formatCedi(data.commissionAmount)})` : ""}`
+        );
+        setShowForm(false);
+        setSelectedCustomer(null);
+        setSearchQuery("");
+        setWithdrawAmount("");
+        setNotes("");
+        loadWithdrawals();
+      } else {
+        setError(result.error || "Failed to process withdrawal");
+      }
+    } catch {
+      setError("An unexpected error occurred");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Withdrawals</h1>
+          <p className="text-gray-500 mt-1">Process and view customer withdrawals</p>
+        </div>
+        <button onClick={() => setShowForm(!showForm)} className="btn btn-primary">
+          {showForm ? "Cancel" : "+ Process Withdrawal"}
+        </button>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+          {error}
+          <button onClick={() => setError("")} className="ml-2">✕</button>
+        </div>
+      )}
+      {success && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4">
+          {success}
+          <button onClick={() => setSuccess("")} className="ml-2">✕</button>
+        </div>
+      )}
+
+      {/* Withdrawal Form */}
+      {showForm && (
+        <div className="card mb-6">
+          <h2 className="text-lg font-semibold mb-4">Process Withdrawal</h2>
+
+          <div className="form-group">
+            <label className="form-label">Search Customer *</label>
+            <input
+              type="text"
+              placeholder="Search by name, ID, or phone..."
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+            />
+            {searchResults.length > 0 && (
+              <div className="border border-gray-200 rounded-lg mt-1 max-h-48 overflow-y-auto">
+                {searchResults.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      setSelectedCustomer(c);
+                      setSearchQuery(c.fullName);
+                      setSearchResults([]);
+                    }}
+                    className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                  >
+                    <div className="font-medium text-sm">{c.fullName}</div>
+                    <div className="text-xs text-gray-500">
+                      {c.customerId} &bull; {c.accounts[0]?.accountId}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {selectedCustomer && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+              <div className="font-medium">{selectedCustomer.fullName}</div>
+              <div className="text-sm text-gray-600">
+                Account: {selectedCustomer.accounts[0]?.accountId} &bull; Daily:{" "}
+                {formatCedi(selectedCustomer.accounts[0]?.dailyContribution || 0)}/day
+              </div>
+              <p className="text-xs text-orange-600 mt-1">
+                ⚠️ First withdrawal in a cycle will incur a one-day commission (
+                {formatCedi(selectedCustomer.accounts[0]?.dailyContribution || 0)})
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="form-group">
+              <label className="form-label">Withdrawal Amount (GH₵) *</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="Amount to withdraw"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Notes</label>
+              <input
+                type="text"
+                placeholder="Optional note"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex gap-3 mt-4">
+            <button
+              onClick={handleProcessWithdrawal}
+              className="btn btn-primary"
+              disabled={submitting || !selectedCustomer}
+            >
+              {submitting ? "Processing..." : "Process Withdrawal"}
+            </button>
+            <button
+              onClick={() => {
+                setShowForm(false);
+                setSelectedCustomer(null);
+              }}
+              className="btn btn-secondary"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Withdrawals List */}
+      <div className="card">
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="spinner"></div>
+          </div>
+        ) : withdrawals.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            <p className="text-4xl mb-2">🏧</p>
+            <p className="font-medium">No withdrawals yet</p>
+          </div>
+        ) : (
+          <>
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Customer</th>
+                    <th>Requested</th>
+                    <th>Commission</th>
+                    <th>Net Paid</th>
+                    <th>Balance</th>
+                    <th>Cycle</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {withdrawals.map((w) => (
+                    <tr key={w.id}>
+                      <td className="text-sm">{formatDateTime(w.createdAt)}</td>
+                      <td>
+                        <div className="font-medium text-sm">{w.account.customer.fullName}</div>
+                        <div className="text-xs text-gray-500">{w.account.customer.customerId}</div>
+                      </td>
+                      <td className="font-mono text-sm">{formatCedi(w.requestedAmount)}</td>
+                      <td className="font-mono text-sm">
+                        {w.commissionAmount > 0 ? (
+                          <span className="text-orange-600">{formatCedi(w.commissionAmount)}</span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="font-mono text-sm font-semibold">{formatCedi(w.netAmount)}</td>
+                      <td className="font-mono text-sm text-blue-600">{formatCedi(w.remainingBalance)}</td>
+                      <td>
+                        <span className="badge badge-blue">Cycle {w.cycle.cycleNumber}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {pagination && pagination.totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
+                <p className="text-sm text-gray-500">
+                  Page {pagination.page} of {pagination.totalPages}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+                    disabled={page === pagination.totalPages}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

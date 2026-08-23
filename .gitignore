@@ -1,0 +1,44 @@
+node_modules
+
+# Environment variables — NEVER commit secrets
+.env
+.env.local
+.env.pilot.local
+!.env.example
+
+# Build output
+.next
+
+# Database files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Backups and dumps
+backups/
+*.dump
+
+# Test databases
+tests/test-*.db
+
+# Prisma generated
+/src/generated/prisma
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temp/build files
+cookies.txt
+snapshot-sqlite.js
+tsconfig.tsbuildinfo
+
+# IDE files
+.vscode/
+.idea/
+
+# AI assistant directories
+.agents/
+.claude/
+.windsurf/

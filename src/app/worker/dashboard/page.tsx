@@ -1,0 +1,126 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { getWorkerDailyAccounts, createDailyAccount } from "@/lib/actions/daily-account.actions";
+import { formatDate, getGreeting, getTodayString } from "@/lib/utils";
+import Link from "next/link";
+
+interface DailyAccount {
+  id: string; businessDate: Date; status: string;
+  calculatedMomoVariance: number; calculatedCashVariance: number;
+  location: { name: string };
+}
+
+interface UserInfo { userId: string; email: string; role: string; locationId?: string; }
+interface FullUser { id: string; fullName: string; email: string; location?: { id: string; name: string; code: string } | null; locationId?: string; }
+
+export default function WorkerDashboardPage() {
+  const [userName, setUserName] = useState("");
+  const [locationName, setLocationName] = useState("");
+  const [accounts, setAccounts] = useState<DailyAccount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
+  const [locationId, setLocationId] = useState("");
+
+  async function loadData() {
+    try {
+      // Get user info via API
+      const authRes = await fetch("/api/auth/me");
+      const authUser: UserInfo | null = authRes.ok ? await authRes.json() : null;
+
+      if (authUser?.userId) {
+        const userRes = await fetch(`/api/user/${authUser.userId}`);
+        const fullUser: FullUser | null = userRes.ok ? await userRes.json() : null;
+        if (fullUser) {
+          setUserName(fullUser.fullName);
+          setLocationName(fullUser.location?.name || "");
+          setLocationId(fullUser.locationId || "");
+        }
+      }
+
+      const accountsData = await getWorkerDailyAccounts();
+      setAccounts(accountsData as unknown as DailyAccount[]);
+    } catch { setError("Failed to load dashboard"); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { loadData(); }, []);
+
+  async function handleCreateAccount() {
+    if (!locationId) return;
+    setCreating(true); setError("");
+    try {
+      const today = getTodayString();
+      const result = await createDailyAccount(locationId, today);
+      if (result.success) {
+        const account = result.data as { id: string };
+        window.location.href = `/worker/daily/${account.id}`;
+      } else { setError(result.error || "Failed to create daily account"); }
+    } catch { setError("An unexpected error occurred"); }
+    finally { setCreating(false); }
+  }
+
+  if (loading) return <div className="flex items-center justify-center py-20"><div className="spinner"></div></div>;
+
+  const todayAccount = accounts.find((a) => new Date(a.businessDate).toISOString().split("T")[0] === getTodayString());
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <h1 className="text-2xl font-bold text-gray-900">{getGreeting()}! 👋</h1>
+        {locationName && <p className="text-gray-500 mt-1">Location: <span className="font-medium text-gray-700">{locationName}</span></p>}
+      </div>
+
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
+
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <h2 className="text-lg font-semibold mb-4">Today&apos;s Account</h2>
+        {todayAccount ? (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <span className={`badge ${todayAccount.status === "submitted" ? "badge-green" : todayAccount.status === "reviewed" ? "badge-blue" : "badge-yellow"}`}>{todayAccount.status}</span>
+              {todayAccount.status === "draft" && <Link href={`/worker/daily/${todayAccount.id}`} className="btn btn-primary btn-sm">Continue →</Link>}
+            </div>
+            {todayAccount.status !== "draft" && (
+              <div className="text-center py-4 text-gray-500"><p className="text-2xl mb-2">✅</p><p className="font-medium">Today&apos;s account has been submitted</p></div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-6">
+            <p className="text-gray-500 mb-4">No account opened for today yet</p>
+            <button onClick={handleCreateAccount} className="btn btn-primary" disabled={creating}>
+              {creating ? <span className="flex items-center gap-2"><span className="spinner"></span>Opening...</span> : "Start Daily Account"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <h2 className="text-lg font-semibold mb-4">Recent Reports</h2>
+        {accounts.length === 0 ? (
+          <div className="text-center py-6 text-gray-500"><p className="text-3xl mb-2">📋</p><p>No reports yet</p></div>
+        ) : (
+          <div className="space-y-2">
+            {accounts.slice(0, 10).map((account) => {
+              const variance = Number(account.calculatedMomoVariance) + Number(account.calculatedCashVariance);
+              return (
+                <Link key={account.id} href={`/worker/daily/${account.id}`} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 border border-gray-100 transition-colors">
+                  <div className="font-medium text-sm">{formatDate(account.businessDate)}</div>
+                  <div className="text-right">
+                    <span className={`badge ${account.status === "submitted" ? "badge-green" : account.status === "reviewed" ? "badge-blue" : "badge-yellow"}`}>{account.status}</span>
+                    {account.status !== "draft" && (
+                      <div className="text-xs font-mono mt-1">
+                        {variance === 0 ? <span className="text-green-600">Balanced</span> : <span className="text-red-600">{variance > 0 ? "+" : ""}GH&#x20B5; {variance.toFixed(2)}</span>}
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,116 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { getDailyAccounts } from "@/lib/actions/daily-account.actions";
+import { getLocations } from "@/lib/actions/location.actions";
+import { formatCedi, formatDate } from "@/lib/utils";
+import Link from "next/link";
+
+interface Account {
+  id: string; businessDate: Date; status: string; submittedAt?: Date | null;
+  openingMomoFloat: number; openingCash: number; totalCashIn: number; totalCashOut: number;
+  totalCashReceived: number; totalCashPaid: number; commission: number; totalExpenses: number;
+  closingMomoFloat: number; closingCash: number;
+  calculatedMomoVariance: number; calculatedCashVariance: number;
+  location: { id: string; name: string; code: string };
+  worker: { id: string; fullName: string; email: string };
+}
+interface Pagination { page: number; limit: number; total: number; totalPages: number; }
+interface Location { id: string; name: string; code: string; }
+
+export default function ReportsPage() {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [locationId, setLocationId] = useState("");
+  const [status, setStatus] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
+
+  async function loadLocations() {
+    try {
+      const data = await getLocations();
+      setLocations((data as Array<{ id: string; name: string; code: string }>).map((l) => ({ id: l.id, name: l.name, code: l.code })));
+    } catch { /* ignore */ }
+  }
+
+  async function loadAccounts() {
+    setLoading(true);
+    try {
+      const result = await getDailyAccounts({ page, limit: 15, locationId: locationId || undefined, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined });
+      setAccounts(result.accounts as unknown as Account[]); setPagination(result.pagination);
+    } catch { /* ignore */ } finally { setLoading(false); }
+  }
+
+  useEffect(() => { loadLocations(); }, []);
+  useEffect(() => { loadAccounts(); }, [locationId, status, dateFrom, dateTo, page]);
+
+  function handleExportCSV() {
+    if (accounts.length === 0) return;
+    const headers = ["Date","Location","Worker","Status","Opening MoMo","Opening Cash","Cash In","Cash Out","Cash Received","Cash Paid","Commission","Expenses","Closing MoMo","Closing Cash","MoMo Var","Cash Var"];
+    const rows = accounts.map((a) => [a.businessDate, a.location.name, a.worker.fullName, a.status, a.openingMomoFloat, a.openingCash, a.totalCashIn, a.totalCashOut, a.totalCashReceived, a.totalCashPaid, a.commission, a.totalExpenses, a.closingMomoFloat, a.closingCash, a.calculatedMomoVariance, a.calculatedCashVariance]);
+    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `bik-prestige-momo-reports-${new Date().toISOString().split("T")[0]}.csv`; a.click(); URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-8">
+        <div><h1 className="text-2xl font-bold text-gray-900">Reports</h1><p className="text-gray-500 mt-1">View and filter daily account reports</p></div>
+        <button onClick={handleExportCSV} className="btn btn-secondary btn-sm" disabled={accounts.length === 0}>📥 Export CSV</button>
+      </div>
+
+      <div className="card mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="form-group"><label className="form-label">Location</label><select value={locationId} onChange={(e) => { setLocationId(e.target.value); setPage(1); }}><option value="">All Locations</option>{locations.map((loc) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}</select></div>
+          <div className="form-group"><label className="form-label">Status</label><select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}><option value="">All Statuses</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="reviewed">Reviewed</option></select></div>
+          <div className="form-group"><label className="form-label">Date From</label><input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} /></div>
+          <div className="form-group"><label className="form-label">Date To</label><input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} /></div>
+        </div>
+      </div>
+
+      <div className="card">
+        {loading ? (
+          <div className="flex items-center justify-center py-12"><div className="spinner"></div></div>
+        ) : accounts.length === 0 ? (
+          <div className="text-center py-12 text-gray-500"><p className="text-4xl mb-2">📋</p><p className="font-medium">No reports found</p><p className="text-sm mt-1">Try adjusting your filters.</p></div>
+        ) : (
+          <>
+            <div className="table-container">
+              <table>
+                <thead><tr><th>Date</th><th>Location</th><th>Worker</th><th>Status</th><th className="text-right">MoMo Var</th><th className="text-right">Cash Var</th><th className="text-right">Expenses</th><th></th></tr></thead>
+                <tbody>
+                  {accounts.map((account) => (
+                    <tr key={account.id}>
+                      <td className="font-medium">{formatDate(account.businessDate)}</td>
+                      <td><div>{account.location.name}</div><div className="text-xs text-gray-500">{account.location.code}</div></td>
+                      <td>{account.worker.fullName}</td>
+                      <td><span className={`badge ${account.status === "submitted" ? "badge-green" : account.status === "reviewed" ? "badge-blue" : account.status === "draft" ? "badge-yellow" : "badge-gray"}`}>{account.status}</span></td>
+                      <td className="text-right font-mono text-sm"><span className={Number(account.calculatedMomoVariance) === 0 ? "text-green-600" : "text-red-600"}>{Number(account.calculatedMomoVariance) === 0 ? "GH\u20B5 0" : `${Number(account.calculatedMomoVariance) > 0 ? "+" : ""}${formatCedi(account.calculatedMomoVariance)}`}</span></td>
+                      <td className="text-right font-mono text-sm"><span className={Number(account.calculatedCashVariance) === 0 ? "text-green-600" : "text-red-600"}>{Number(account.calculatedCashVariance) === 0 ? "GH\u20B5 0" : `${Number(account.calculatedCashVariance) > 0 ? "+" : ""}${formatCedi(account.calculatedCashVariance)}`}</span></td>
+                      <td className="text-right font-mono text-sm">{formatCedi(account.totalExpenses)}</td>
+                      <td><Link href={`/admin/reports/${account.id}`} className="text-sm text-blue-600 hover:text-blue-800">View</Link></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {pagination && pagination.totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
+                <p className="text-sm text-gray-500">Showing {(pagination.page - 1) * pagination.limit + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="btn btn-secondary btn-sm">Previous</button>
+                  <button onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))} disabled={page === pagination.totalPages} className="btn btn-secondary btn-sm">Next</button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
