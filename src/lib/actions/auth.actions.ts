@@ -39,19 +39,21 @@ function dashboardPathFor(module: ModuleName): string {
 export async function login(
   formData: FormData
 ): Promise<ActionResponse | void> {
-  // Rate limiting: 5 attempts per 15 minutes per IP
+  // Rate limiting: 5 attempts per 15 minutes per email+IP
+  // Uses email+IP so one user's failures don't lock out others on the same Render proxy.
   const hdrs = await headers();
   const clientIp = getClientIp(hdrs);
-  const rateLimitResult = checkRateLimit(`login:${clientIp}`);
-
-  if (!rateLimitResult.allowed) {
-    return {
-      success: false,
-      error: "Too many login attempts. Please try again later.",
-    };
-  }
-
   const email = (formData.get("email") as string)?.trim();
+
+  if (email) {
+    const rateLimitResult = checkRateLimit(`login:${email.toLowerCase()}:${clientIp}`);
+    if (!rateLimitResult.allowed) {
+      return {
+        success: false,
+        error: "Too many login attempts for this account. Please try again in 15 minutes.",
+      };
+    }
+  }
   const password = formData.get("password") as string;
 
   const validated = loginSchema.safeParse({ email, password });

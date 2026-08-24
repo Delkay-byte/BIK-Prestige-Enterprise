@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAuth, requireAdmin } from "@/lib/auth";
+import { getAnyAuthUser, requireAdmin } from "@/lib/auth";
 import { createAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
@@ -29,8 +29,14 @@ export async function recordContribution(params: {
   collectorId?: string;
   notes?: string;
 }): Promise<ActionResponse> {
-  // Admins can record any contribution; collectors can only record their own
-  const user = await requireAuth();
+  // Admins can record any contribution; collectors can only record their own.
+  // Use getAnyAuthUser() instead of requireAuth() to avoid redirect() from
+  // a Server Action — redirects inside Server Actions don't propagate to the
+  // client correctly when called from onClick handlers.
+  const user = await getAnyAuthUser();
+  if (!user) {
+    return { success: false, error: "Not authenticated. Please sign in again." };
+  }
   if (user.role !== "admin" && user.role !== "collector") {
     return { success: false, error: "Not authorized to record contributions" };
   }

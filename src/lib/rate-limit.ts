@@ -1,8 +1,12 @@
 /**
  * Simple in-memory rate limiter for authentication endpoints.
- * 
- * Limits: 5 attempts per 15 minutes per IP address.
- * 
+ *
+ * Limits: 5 attempts per 15 minutes per account+IP.
+ *
+ * Uses email+IP as the key so that:
+ * - One user's failed attempts don't lock out other users
+ * - The same account can't be brute-forced from multiple IPs
+ *
  * This is sufficient for pilot deployment. For production scale,
  * consider Redis-backed rate limiting (e.g., @upstash/ratelimit).
  */
@@ -34,7 +38,7 @@ export interface RateLimitResult {
 }
 
 /**
- * Check rate limit for a given key (typically IP address).
+ * Check rate limit for a given key.
  * Returns whether the request is allowed.
  */
 export function checkRateLimit(key: string): RateLimitResult {
