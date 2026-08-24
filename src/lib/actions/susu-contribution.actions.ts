@@ -15,24 +15,23 @@ export interface ActionResponse {
 /**
  * Record a contribution and allocate it across outstanding days in the cycle.
  *
- * Multi-day allocation logic:
- * - Customer's daily plan = GH₵X/day
- * - Collection event = GH₵Y total
- * - System calculates: Y / X = number of days covered (integer division)
- * - Allocates to the first N unpaid days in the cycle
- * - Any remainder less than one day stays as unallocated credit
+ * Identity is derived server-side from the authenticated session:
+ * - Admin → can record for any account (channel = "direct_office")
+ * - Collector → can only record for assigned customers (channel = "collector")
+ *
+ * The client must NOT supply collectorId — it is always resolved from the
+ * authenticated user's session to prevent impersonation.
  */
 export async function recordContribution(params: {
   accountId: string;
   amount: number;
   channel: "collector" | "direct_office";
-  collectorId?: string;
+  collectorId?: string; // Admin-only: manually selected collector. Ignored for collector role.
   notes?: string;
 }): Promise<ActionResponse> {
-  // Admins can record any contribution; collectors can only record their own.
-  // Use getAnyAuthUser() instead of requireAuth() to avoid redirect() from
-  // a Server Action — redirects inside Server Actions don't propagate to the
-  // client correctly when called from onClick handlers.
+  const { accountId, amount, channel, notes } = params;
+
+  // ── 1. Authenticate ─────────────────────────────────────────────────
   const user = await getAnyAuthUser();
   if (!user) {
     return { success: false, error: "Not authenticated. Please sign in again." };
@@ -41,13 +40,37 @@ export async function recordContribution(params: {
     return { success: false, error: "Not authorized to record contributions" };
   }
 
-  const { accountId, amount, channel, collectorId, notes } = params;
-
-  if (amount <= 0) {
+  // ── 2. Validate amount ──────────────────────────────────────────────
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
     return { success: false, error: "Contribution amount must be greater than 0" };
   }
 
-  // Fetch the account with active cycle
+  // ── 3. Derive collector identity from session ───────────────────────
+  let effectiveCollectorId: string | null = null;
+
+  if (channel === "collector") {
+    if (user.role === "collector") {
+      // Collector: always derive from session (never trust client input)
+      const userCollector = await db.collector.findUnique({
+        where: { userId: user.userId },
+      });
+      if (!userCollector) {
+        return { success: false, error: "Collector record not found for your account" };
+      }
+      effectiveCollectorId = userCollector.id;
+    } else if (user.role === "admin" && params.collectorId) {
+      // Admin recording on behalf of a collector: trust the admin-selected ID
+      const collector = await db.collector.findUnique({ where: { id: params.collectorId } });
+      if (!collector) {
+        return { success: false, error: "Selected collector not found" };
+      }
+      effectiveCollectorId = params.collectorId;
+    } else {
+      return { success: false, error: "Collector identity is required for collector-channel contributions" };
+    }
+  }
+
+  // ── 4. Fetch account and verify ─────────────────────────────────────
   const account = await db.susuAccount.findUnique({
     where: { id: accountId },
     include: {
@@ -56,43 +79,42 @@ export async function recordContribution(params: {
     },
   });
 
-  if (!account) return { success: false, error: "Susu account not found" };
-  if (account.status !== "active") return { success: false, error: "Account is not active" };
-  if (!account.cycles.length) return { success: false, error: "No active cycle found" };
+  if (!account) {
+    return { success: false, error: "Susu account not found" };
+  }
+  if (account.status !== "active") {
+    return { success: false, error: "Account is not active" };
+  }
+  if (!account.cycles.length) {
+    return { success: false, error: "No active cycle found for this account" };
+  }
+
+  // ── 5. Authorize: collector can only record for assigned customers ───
+  if (effectiveCollectorId) {
+    const assignment = await db.collectorCustomerAssignment.findFirst({
+      where: {
+        collectorId: effectiveCollectorId,
+        accountId: accountId,
+        active: true,
+      },
+    });
+    if (!assignment) {
+      return {
+        success: false,
+        error: "This customer is not assigned to the collector.",
+      };
+    }
+  }
 
   const cycle = account.cycles[0];
   const dailyContribution = Number(cycle.dailyContribution);
 
-  // Validate channel-specific requirements
-  if (channel === "collector" && !collectorId) {
-    return { success: false, error: "Collector ID is required for collector-channel contributions" };
-  }
-
-  // Verify collector exists and is the authenticated user (if collector role)
-  if (collectorId) {
-    const collector = await db.collector.findUnique({ where: { id: collectorId } });
-    if (!collector) return { success: false, error: "Collector not found" };
-    // If the user is a collector, they can only record for themselves
-    if (user.role === "collector") {
-      const userCollector = await db.collector.findUnique({ where: { userId: user.userId } });
-      if (!userCollector || userCollector.id !== collectorId) {
-        return { success: false, error: "You can only record collections for yourself" };
-      }
-    }
-  }
-  // If user is a collector, auto-assign their collector ID
-  let effectiveCollectorId = collectorId;
-  if (user.role === "collector" && !effectiveCollectorId) {
-    const userCollector = await db.collector.findUnique({ where: { userId: user.userId } });
-    if (userCollector) effectiveCollectorId = userCollector.id;
-  }
-
-  // Generate idempotency key
+  // ── 6. Generate idempotency key ─────────────────────────────────────
   const referenceId = `CON-${randomBytes(8).toString("hex")}`;
 
-  // Use a database transaction for financial integrity
+  // ── 7. Database transaction (financial integrity) ───────────────────
   const result = await db.$transaction(async (tx) => {
-    // 1. Create the contribution record
+    // Create the contribution record
     const contribution = await tx.contribution.create({
       data: {
         accountId: account.id,
@@ -100,19 +122,18 @@ export async function recordContribution(params: {
         amount,
         collectionDate: new Date(),
         channel,
-        collectorId: effectiveCollectorId || null,
+        collectorId: effectiveCollectorId,
         recordedById: user.userId,
         referenceId,
         notes,
       },
     });
 
-    // 2. Calculate how many days this covers
+    // Calculate days covered
     const daysCovered = Math.floor(amount / dailyContribution);
     const allocatedAmount = daysCovered * dailyContribution;
-    const unallocatedAmount = amount - allocatedAmount;
 
-    // 3. Find already-paid days in this cycle
+    // Find already-paid days in this cycle
     const existingAllocations = await tx.contributionAllocation.findMany({
       where: {
         contribution: { cycleId: cycle.id },
@@ -120,7 +141,7 @@ export async function recordContribution(params: {
     });
     const paidDays = new Set(existingAllocations.map((a) => a.cycleDay));
 
-    // 4. Allocate to first N unpaid days (max 31 days in cycle)
+    // Allocate to first N unpaid days
     const allocations: { contributionId: string; cycleDay: number; amount: number }[] = [];
     let daysAllocated = 0;
 
@@ -135,24 +156,19 @@ export async function recordContribution(params: {
       }
     }
 
-    // Create allocations
     if (allocations.length > 0) {
       await tx.contributionAllocation.createMany({ data: allocations });
     }
-
-    // Check if all 31 days are now paid
-    const allDaysPaid = paidDays.size + daysAllocated >= 31;
 
     return {
       contribution,
       daysAllocated,
       allocatedAmount,
-      unallocatedAmount,
       totalDaysPaid: paidDays.size + daysAllocated,
-      allDaysPaid,
     };
   });
 
+  // ── 8. Audit log ────────────────────────────────────────────────────
   await createAuditLog({
     userId: user.userId,
     action: "susu.contribution_recorded",
@@ -162,15 +178,28 @@ export async function recordContribution(params: {
       accountId,
       amount,
       channel,
+      collectorId: effectiveCollectorId,
       daysAllocated: result.daysAllocated,
       allocatedAmount: result.allocatedAmount,
+      referenceId,
     },
   });
 
+  // ── 9. Revalidate relevant pages ────────────────────────────────────
   revalidatePath("/susu/admin/contributions");
   revalidatePath("/susu/admin/customers");
   revalidatePath("/susu/admin");
-  return { success: true, data: result };
+  revalidatePath("/collector/dashboard");
+
+  return {
+    success: true,
+    data: {
+      contributionId: result.contribution.id,
+      daysAllocated: result.daysAllocated,
+      allocatedAmount: Number(result.allocatedAmount),
+      referenceId,
+    },
+  };
 }
 
 export async function getContributions(params?: {
