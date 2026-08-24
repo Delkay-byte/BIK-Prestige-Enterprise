@@ -30,7 +30,7 @@ export default function WorkerDashboardPage() {
   async function loadData() {
     try {
       // Get user info via API
-      const authRes = await fetch("/api/auth/me");
+      const authRes = await fetch("/api/auth/me?module=momo");
       const authUser: UserInfo | null = authRes.ok ? await authRes.json() : null;
 
       if (authUser?.userId) {
@@ -84,7 +84,7 @@ export default function WorkerDashboardPage() {
         {todayAccount ? (
           <div>
             <div className="flex items-center justify-between mb-4">
-              <span className={`badge ${todayAccount.status === "submitted" ? "badge-green" : todayAccount.status === "reviewed" ? "badge-blue" : "badge-yellow"}`}>{todayAccount.status}</span>
+              <span className={`badge ${todayAccount.status === "submitted" ? "badge-green" : todayAccount.status === "reviewed" ? "badge-blue" : "badge-yellow"}`}>{todayAccount.status === "draft" ? "Draft Saved" : todayAccount.status === "submitted" ? "Submitted" : todayAccount.status === "reviewed" ? "Reviewed" : todayAccount.status}</span>
               {todayAccount.status === "draft" && <Link href={`/worker/daily/${todayAccount.id}`} className="btn btn-primary btn-sm">Continue →</Link>}
             </div>
             {todayAccount.status !== "draft" && (
@@ -113,10 +113,17 @@ export default function WorkerDashboardPage() {
                 <Link key={account.id} href={`/worker/daily/${account.id}`} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 border border-gray-100 transition-colors">
                   <div className="font-medium text-sm">{formatDate(account.businessDate)}</div>
                   <div className="text-right">
-                    <span className={`badge ${account.status === "submitted" ? "badge-green" : account.status === "reviewed" ? "badge-blue" : "badge-yellow"}`}>{account.status}</span>
+                    <span className={`badge ${account.status === "submitted" ? "badge-green" : account.status === "reviewed" ? "badge-blue" : "badge-yellow"}`}>{account.status === "draft" ? "Draft Saved" : account.status === "submitted" ? "Submitted" : account.status === "reviewed" ? "Reviewed" : account.status}</span>
                     {account.status !== "draft" && (
-                      <div className="text-xs font-mono mt-1">
-                        {variance === 0 ? <span className="text-green-600">Balanced</span> : <span className="text-red-600">{variance > 0 ? "+" : ""}GH&#x20B5; {variance.toFixed(2)}</span>}
+                      <div className="text-xs mt-1">
+                        {variance === 0 ? (
+                          <span className="text-green-600">✓ Matches</span>
+                        ) : (
+                          <span className="text-red-600">
+                            Total Difference: {variance > 0 ? "+" : ""}GH&#x20B5;{variance.toFixed(2)}
+                            <br />⚠ Check Required
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>

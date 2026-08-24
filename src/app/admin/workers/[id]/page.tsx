@@ -153,14 +153,24 @@ export default function WorkerDetailPage() {
             <div className="space-y-2">
               {worker.dailyAccounts.slice(0, 5).map((account) => {
                 const variance = Number(account.calculatedMomoVariance) + Number(account.calculatedCashVariance);
+                const statusLabel = account.status === "draft" ? "Draft Saved" : account.status === "submitted" ? "Submitted" : account.status === "reviewed" ? "Reviewed" : account.status;
                 return (
                   <div key={account.id} className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
                     <div className="font-medium text-sm">{new Date(account.businessDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
                     <div className="text-right">
-                      <span className={`badge ${account.status === "submitted" ? "badge-green" : "badge-yellow"}`}>{account.status}</span>
-                      <div className="text-xs font-mono mt-1">
-                        {variance === 0 ? <span className="text-green-600">GH\u20B5 0</span> : <span className="text-red-600">{variance > 0 ? "+" : ""}GH\u20B5 {variance.toFixed(2)}</span>}
-                      </div>
+                      <span className={`badge ${account.status === "submitted" ? "badge-green" : account.status === "reviewed" ? "badge-blue" : "badge-yellow"}`}>{statusLabel}</span>
+                      {account.status !== "draft" && (
+                        <div className="text-xs mt-1">
+                          {variance === 0 ? (
+                            <span className="text-green-600">✓ Matches</span>
+                          ) : (
+                            <span className="text-red-600">
+                              Total Difference: {variance > 0 ? "+" : ""}GH\u20B5{variance.toFixed(2)}
+                              <br />⚠ Check Required
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

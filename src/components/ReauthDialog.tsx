@@ -43,7 +43,7 @@ export default function ReauthDialog({
     setError("");
 
     try {
-      const result = await verifyPasswordAction(password);
+      const result = await verifyPasswordAction(password.trim());
       if (result.success) {
         setPassword("");
         onConfirmed();

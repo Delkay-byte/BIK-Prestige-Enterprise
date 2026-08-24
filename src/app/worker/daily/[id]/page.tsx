@@ -251,7 +251,7 @@ export default function DailyAccountFormPage() {
                   <span className="font-semibold">Total Difference <InfoTooltip text="The combined difference between the expected MoMo balance/cash position and the amounts you reported." /></span>
                   <span className={`text-xl font-bold ${totalVariance === 0 ? "text-green-700" : "text-red-700"}`}>{totalVariance === 0 ? "GH\u20B5 0.00" : `${totalVariance > 0 ? "+" : "-"}${formatCedi(Math.abs(totalVariance))}`}</span>
                 </div>
-                <div className="mt-1"><span className={`badge ${totalVariance === 0 ? "badge-green" : "badge-red"}`}>{totalVariance === 0 ? "Balanced" : "⚠ Check Required"}</span></div>
+                <div className="mt-1"><span className={`badge ${totalVariance === 0 ? "badge-green" : "badge-red"}`}>{totalVariance === 0 ? "Matches" : "⚠ Check Required"}</span></div>
                 {totalVariance !== 0 && (
                   <p className="text-sm text-yellow-800 mt-2">
                     The amounts you entered do not match the expected figures. Please review your entries before submitting.

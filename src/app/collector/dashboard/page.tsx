@@ -171,7 +171,7 @@ export default function CollectorDashboardPage() {
 
   async function loadData() {
     try {
-      const authRes = await fetch("/api/auth/me");
+      const authRes = await fetch("/api/auth/me?module=susu");
       const authUser = authRes.ok ? await authRes.json() : null;
       if (authUser?.userId) {
         const userRes = await fetch(`/api/user/${authUser.userId}`);

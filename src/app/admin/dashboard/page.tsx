@@ -41,12 +41,20 @@ interface SusuStats {
 export default function AdminDashboardPage() {
   const [momoStats, setMomoStats] = useState<MoMoStats | null>(null);
   const [susuStats, setSusuStats] = useState<SusuStats | null>(null);
+  const [userName, setUserName] = useState("Admin");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [quote] = useState(() => getDailyQuote("admin"));
 
   async function loadStats() {
     try {
+      const authRes = await fetch("/api/auth/me?module=admin");
+      const authUser = authRes.ok ? await authRes.json() : null;
+      if (authUser?.userId) {
+        const userRes = await fetch(`/api/user/${authUser.userId}`);
+        const fullUser = userRes.ok ? await userRes.json() : null;
+        if (fullUser?.fullName) setUserName(fullUser.fullName);
+      }
       const [momo, susu] = await Promise.all([
         getAdminDashboardStats(),
         getSusuDashboardStats(),
@@ -78,7 +86,7 @@ export default function AdminDashboardPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">{getGreeting()}, Admin 👋</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{getGreeting()}, {userName}! 👋</h1>
         <p className="text-gray-500 mt-1">BIK Prestige Enterprise — Overview of all modules</p>
         <p className="text-sm text-green-600 italic mt-1">&ldquo;{quote}&rdquo;</p>
       </div>
@@ -167,7 +175,7 @@ export default function AdminDashboardPage() {
           </div>
         </div>
         <div className="card">
-          <div className="text-sm text-gray-500 mb-1">Pending Remittances</div>
+          <div className="text-sm text-gray-500 mb-1">Pending Money Handed In</div>
           <div className={`text-xl font-bold ${susuStats && susuStats.pendingRemittances > 0 ? "text-red-600" : "text-green-700"}`}>
             {susuStats ? <CediAmount amount={susuStats.pendingRemittances} /> : "—"}
           </div>

@@ -39,7 +39,7 @@ export default function SettingsView({ module }: { module: "admin" | "momo" | "s
 
   async function loadProfile() {
     try {
-      const authRes = await fetch("/api/auth/me");
+      const authRes = await fetch(`/api/auth/me?module=${module === "momo" ? "momo" : module === "susu" ? "susu" : "admin"}`);
       if (!authRes.ok) {
         router.push("/login");
         return;
@@ -220,10 +220,8 @@ export default function SettingsView({ module }: { module: "admin" | "momo" | "s
         )}
       </div>
 
-      {/* Footer attribution */}
-      <p className="text-center text-xs text-gray-400 mt-8">
-        BIK Prestige Enterprise — Built by BloomCore Technologies
-      </p>
+      {/* Footer attribution — shown only if parent layout doesn't already render it */}
+      {/* Intentionally removed to avoid duplicate when parent layout provides it */}
     </div>
   );
 }

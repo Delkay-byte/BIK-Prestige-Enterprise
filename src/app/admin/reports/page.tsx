@@ -83,14 +83,14 @@ export default function ReportsPage() {
           <>
             <div className="table-container">
               <table>
-                <thead><tr><th>Date</th><th>Location</th><th>Worker</th><th>Status</th><th className="text-right">MoMo Var</th><th className="text-right">Cash Var</th><th className="text-right">Expenses</th><th></th></tr></thead>
+                <thead><tr><th>Date</th><th>Location</th><th>Worker</th><th>Status</th><th className="text-right">MoMo Difference</th><th className="text-right">Cash Difference</th><th className="text-right">Expenses</th><th></th></tr></thead>
                 <tbody>
                   {accounts.map((account) => (
                     <tr key={account.id}>
                       <td className="font-medium">{formatDate(account.businessDate)}</td>
                       <td><div>{account.location.name}</div><div className="text-xs text-gray-500">{account.location.code}</div></td>
                       <td>{account.worker.fullName}</td>
-                      <td><span className={`badge ${account.status === "submitted" ? "badge-green" : account.status === "reviewed" ? "badge-blue" : account.status === "draft" ? "badge-yellow" : "badge-gray"}`}>{account.status}</span></td>
+                      <td><span className={`badge ${account.status === "submitted" ? "badge-green" : account.status === "reviewed" ? "badge-blue" : account.status === "draft" ? "badge-yellow" : "badge-gray"}`}>{account.status === "draft" ? "Draft Saved" : account.status === "submitted" ? "Submitted" : account.status === "reviewed" ? "Reviewed" : account.status}</span></td>
                       <td className="text-right font-mono text-sm"><span className={Number(account.calculatedMomoVariance) === 0 ? "text-green-600" : "text-red-600"}>{Number(account.calculatedMomoVariance) === 0 ? "GH\u20B5 0" : `${Number(account.calculatedMomoVariance) > 0 ? "+" : ""}${formatCedi(account.calculatedMomoVariance)}`}</span></td>
                       <td className="text-right font-mono text-sm"><span className={Number(account.calculatedCashVariance) === 0 ? "text-green-600" : "text-red-600"}>{Number(account.calculatedCashVariance) === 0 ? "GH\u20B5 0" : `${Number(account.calculatedCashVariance) > 0 ? "+" : ""}${formatCedi(account.calculatedCashVariance)}`}</span></td>
                       <td className="text-right font-mono text-sm">{formatCedi(account.totalExpenses)}</td>

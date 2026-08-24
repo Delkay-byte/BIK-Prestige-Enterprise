@@ -331,9 +331,13 @@ export async function changePassword(
     return { success: false, error: "Session expired. Please sign in again." };
   }
 
-  const currentPassword = formData.get("currentPassword") as string;
-  const newPassword = formData.get("newPassword") as string;
-  const confirmPassword = formData.get("confirmPassword") as string;
+  const currentPassword = (formData.get("currentPassword") as string)?.trim();
+  const newPassword = (formData.get("newPassword") as string)?.trim();
+  const confirmPassword = (formData.get("confirmPassword") as string)?.trim();
+
+  if (!currentPassword) {
+    return { success: false, error: "Current password is required" };
+  }
 
   if (newPassword !== confirmPassword) {
     return { success: false, error: "Passwords don't match" };
