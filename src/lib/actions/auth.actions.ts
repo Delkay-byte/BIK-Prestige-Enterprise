@@ -244,6 +244,54 @@ export async function logout(): Promise<void> {
   redirect("/login");
 }
 
+/**
+ * Verify the current user's password (for step-up reauthentication).
+ * Does not log the password.  Only checks against the active session.
+ */
+export async function verifyPasswordAction(
+  password: string
+): Promise<ActionResponse> {
+  const contexts: Array<{ module: ModuleName; user: JwtPayload | null }> = [
+    { module: "admin", user: await getAdminSession() },
+    { module: "momo", user: await getMomoSession() },
+    { module: "susu", user: await getSusuSession() },
+  ];
+  const context = contexts.find((c) => c.user !== null);
+  if (!context || !context.user) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  if (!(await isSessionCurrent(context.user))) {
+    await clearAllSessions();
+    return { success: false, error: "Session expired. Please sign in again." };
+  }
+
+  const dbUser = await db.user.findUnique({ where: { id: context.user.userId } });
+  if (!dbUser) {
+    return { success: false, error: "User not found" };
+  }
+
+  const valid = await verifyPassword(password, dbUser.passwordHash);
+  if (!valid) {
+    await createAuditLog({
+      userId: context.user.userId,
+      action: "auth.reauth_failed",
+      entityType: "user",
+      entityId: context.user.userId,
+    });
+    return { success: false, error: "Incorrect password" };
+  }
+
+  await createAuditLog({
+    userId: context.user.userId,
+    action: "auth.reauth_success",
+    entityType: "user",
+    entityId: context.user.userId,
+  });
+
+  return { success: true };
+}
+
 export async function changePassword(
   formData: FormData
 ): Promise<ActionResponse> {
@@ -290,13 +338,17 @@ export async function changePassword(
   const wasForced = !!session.forcePasswordReset;
 
   const newHash = await hashPassword(newPassword);
+  // Bump tokenVersion to invalidate ALL existing sessions across all modules
   await db.user.update({
     where: { id: session.userId },
-    data: { passwordHash: newHash, forcePasswordReset: false },
+    data: {
+      passwordHash: newHash,
+      forcePasswordReset: false,
+      tokenVersion: { increment: 1 },
+    },
   });
 
-  // Re-issue THIS module's session so the force-reset flag clears immediately
-  // without requiring the user to log out and back in.
+  // Re-issue THIS module's session with the new tokenVersion
   const refreshed = await buildSessionPayload(session.userId);
   await setModuleSession(context.module, refreshed);
 

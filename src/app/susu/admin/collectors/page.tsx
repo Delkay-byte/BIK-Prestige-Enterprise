@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions/susu-collector.actions";
 import { getActiveLocations } from "@/lib/actions/location.actions";
 import PasswordInput from "@/components/PasswordInput";
+import ReauthDialog from "@/components/ReauthDialog";
 
 interface CollectorData {
   id: string;
@@ -32,6 +33,8 @@ export default function SusuCollectorsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [resetFor, setResetFor] = useState<string | null>(null);
   const [momoFor, setMomoFor] = useState<string | null>(null);
+  const [showReauth, setShowReauth] = useState(false);
+  const [pendingReset, setPendingReset] = useState<{ collectorId: string; formData: FormData } | null>(null);
 
   useEffect(() => {
     loadCollectors();
@@ -69,12 +72,18 @@ export default function SusuCollectorsPage() {
     }
   }
 
-  async function handleResetPassword(collectorId: string, formData: FormData) {
+  function handleResetPassword(collectorId: string, formData: FormData) {
+    setPendingReset({ collectorId, formData });
+    setShowReauth(true);
+  }
+
+  async function executeResetPassword() {
+    if (!pendingReset) return;
     setSubmitting(true);
     setError("");
     setSuccess("");
     try {
-      const result = await resetCollectorPassword(collectorId, formData);
+      const result = await resetCollectorPassword(pendingReset.collectorId, pendingReset.formData);
       if (result.success) {
         setSuccess("Temporary password created. The user must change this password after first login — existing sessions were signed out.");
         setResetFor(null);
@@ -85,6 +94,8 @@ export default function SusuCollectorsPage() {
       setError("An unexpected error occurred");
     } finally {
       setSubmitting(false);
+      setShowReauth(false);
+      setPendingReset(null);
     }
   }
 
@@ -139,6 +150,15 @@ export default function SusuCollectorsPage() {
           <button onClick={() => setSuccess("")} className="ml-2">✕</button>
         </div>
       )}
+
+      <ReauthDialog
+        open={showReauth}
+        onClose={() => { setShowReauth(false); setPendingReset(null); }}
+        onConfirmed={executeResetPassword}
+        title="Confirm your identity"
+        description="For your security, enter your password before resetting this collector's password."
+        actionLabel="Reset Password"
+      />
 
       {showForm && (
         <div className="card mb-6">

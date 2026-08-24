@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import ConfirmSignOutButton from "@/components/ConfirmSignOutButton";
 import RefreshGuard from "@/components/RefreshGuard";
+import SessionMonitor from "@/components/SessionMonitor";
 
 interface NavItem {
   href: string;
@@ -57,6 +58,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <SessionMonitor />
       <RefreshGuard />
       {/* Mobile header */}
       <div className="md:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">

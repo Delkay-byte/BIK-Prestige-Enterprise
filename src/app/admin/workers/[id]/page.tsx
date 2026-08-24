@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { getWorkerById, updateWorker, resetWorkerPassword } from "@/lib/actions/worker.actions";
 import { getActiveLocations } from "@/lib/actions/location.actions";
 import PasswordInput from "@/components/PasswordInput";
+import ReauthDialog from "@/components/ReauthDialog";
 
 interface WorkerDetail {
   id: string; fullName: string; email: string; phone?: string | null; role: string;
@@ -30,6 +31,8 @@ export default function WorkerDetailPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [pendingResetData, setPendingResetData] = useState<FormData | null>(null);
+  const [showReauth, setShowReauth] = useState(false);
 
   useEffect(() => { loadData(); }, [params.id]);
 
@@ -49,13 +52,20 @@ export default function WorkerDetailPage() {
     } catch { setError("An unexpected error occurred"); } finally { setSubmitting(false); }
   }
 
-  async function handleResetPassword(formData: FormData) {
+  function handleResetPassword(formData: FormData) {
+    // Require reauthentication before password reset
+    setPendingResetData(formData);
+    setShowReauth(true);
+  }
+
+  async function executeResetPassword() {
+    if (!pendingResetData) return;
     setSubmitting(true); setError(""); setSuccess("");
     try {
-      const result = await resetWorkerPassword(params.id as string, formData);
+      const result = await resetWorkerPassword(params.id as string, pendingResetData);
       if (result.success) { setSuccess("Temporary password created. The user must change this password after first login — existing sessions were signed out."); setResettingPassword(false); loadData(); }
       else setError(result.error || "Failed to reset password");
-    } catch { setError("An unexpected error occurred"); } finally { setSubmitting(false); }
+    } catch { setError("An unexpected error occurred"); } finally { setSubmitting(false); setShowReauth(false); setPendingResetData(null); }
   }
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="spinner"></div></div>;
@@ -102,6 +112,15 @@ export default function WorkerDetailPage() {
           </form>
         </div>
       )}
+
+      <ReauthDialog
+        open={showReauth}
+        onClose={() => { setShowReauth(false); setPendingResetData(null); }}
+        onConfirmed={executeResetPassword}
+        title="Confirm your identity"
+        description="For your security, enter your password before resetting this user's password."
+        actionLabel="Reset Password"
+      />
 
       {resettingPassword && (
         <div className="card mb-6 border-yellow-200">

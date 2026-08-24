@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getDailyAccountById, saveDailyAccount, submitDailyAccount } from "@/lib/actions/daily-account.actions";
 import { formatCedi, formatDate } from "@/lib/utils";
+import InfoTooltip from "@/components/InfoTooltip";
 
 interface Expense { description: string; amount: number; }
 interface AccountDetail {
@@ -159,8 +160,8 @@ export default function DailyAccountFormPage() {
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
           <h2 className="text-lg font-semibold">Starting Balances</h2>
           <p className="text-sm text-gray-500">Enter the balances you started business with today.</p>
-          <div className="form-group"><label className="form-label">Starting Balance — MoMo (GH&#x20B5;)</label><input type="number" step="0.01" min="0" value={openingMomoFloat || ""} onChange={(e) => setOpeningMomoFloat(parseFloat(e.target.value) || 0)} placeholder="0.00" /><p className="form-hint">Money available in your MoMo account when you started today.</p></div>
-          <div className="form-group"><label className="form-label">Starting Cash (GH&#x20B5;)</label><input type="number" step="0.01" min="0" value={openingCash || ""} onChange={(e) => setOpeningCash(parseFloat(e.target.value) || 0)} placeholder="0.00" /><p className="form-hint">Physical cash you had at the location at the start of the day.</p></div>
+          <div className="form-group"><label className="form-label">Starting Balance — MoMo (GH&#x20B5;) <InfoTooltip text="MoMo money available when you started the day." /></label><input type="number" step="0.01" min="0" value={openingMomoFloat || ""} onChange={(e) => setOpeningMomoFloat(parseFloat(e.target.value) || 0)} placeholder="0.00" /></div>
+          <div className="form-group"><label className="form-label">Starting Cash (GH&#x20B5;) <InfoTooltip text="Physical business cash you had at the beginning of the day." /></label><input type="number" step="0.01" min="0" value={openingCash || ""} onChange={(e) => setOpeningCash(parseFloat(e.target.value) || 0)} placeholder="0.00" /></div>
           <button onClick={() => setStep(2)} className="btn btn-primary w-full">Next: Daily Totals →</button>
         </div>
       )}
@@ -169,20 +170,19 @@ export default function DailyAccountFormPage() {
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
           <h2 className="text-lg font-semibold">Daily Business Totals</h2>
           <p className="text-sm text-gray-500">Enter the summary totals for today&apos;s operations.</p>
-          <div className="form-group"><label className="form-label">Money Added to MoMo (GH&#x20B5;)</label><input type="number" step="0.01" min="0" value={totalCashIn || ""} onChange={(e) => setTotalCashIn(parseFloat(e.target.value) || 0)} placeholder="0.00" /><p className="form-hint">Total money added to your MoMo balance through customer deposits during the day.</p></div>
-          <div className="form-group"><label className="form-label">Money Paid from MoMo (GH&#x20B5;)</label><input type="number" step="0.01" min="0" value={totalCashOut || ""} onChange={(e) => setTotalCashOut(parseFloat(e.target.value) || 0)} placeholder="0.00" /><p className="form-hint">Total money taken from your MoMo balance to pay customers withdrawing money.</p></div>
-          <div className="form-group"><label className="form-label">Cash Received (GH&#x20B5;)</label><input type="number" step="0.01" min="0" value={totalCashReceived || ""} onChange={(e) => setTotalCashReceived(parseFloat(e.target.value) || 0)} placeholder="0.00" /><p className="form-hint">Physical cash received during the day.</p></div>
-          <div className="form-group"><label className="form-label">Cash Paid Out (GH&#x20B5;)</label><input type="number" step="0.01" min="0" value={totalCashPaid || ""} onChange={(e) => setTotalCashPaid(parseFloat(e.target.value) || 0)} placeholder="0.00" /><p className="form-hint">Physical cash paid out during the day.</p></div>
-          <div className="form-group"><label className="form-label">Commission Earned (GH&#x20B5;)</label><input type="number" step="0.01" min="0" value={commission || ""} onChange={(e) => setCommission(parseFloat(e.target.value) || 0)} placeholder="0.00" /><p className="form-hint">Commission earned from MoMo transactions.</p></div>
-          <div className="form-group"><label className="form-label">Other Money Received (GH&#x20B5;)</label><input type="number" step="0.01" min="0" value={otherIncome || ""} onChange={(e) => setOtherIncome(parseFloat(e.target.value) || 0)} placeholder="0.00" /><p className="form-hint">Any other money received that is not already included above.</p></div>
+          <div className="form-group"><label className="form-label">Money Added to MoMo (GH&#x20B5;) <InfoTooltip text="Total money added to your MoMo balance through customer deposits." /></label><input type="number" step="0.01" min="0" value={totalCashIn || ""} onChange={(e) => setTotalCashIn(parseFloat(e.target.value) || 0)} placeholder="0.00" /></div>
+          <div className="form-group"><label className="form-label">Money Paid from MoMo (GH&#x20B5;) <InfoTooltip text="Total MoMo money paid to customers who withdrew money." /></label><input type="number" step="0.01" min="0" value={totalCashOut || ""} onChange={(e) => setTotalCashOut(parseFloat(e.target.value) || 0)} placeholder="0.00" /></div>
+          <div className="form-group"><label className="form-label">Cash Received (GH&#x20B5;) <InfoTooltip text="Physical cash received during the day." /></label><input type="number" step="0.01" min="0" value={totalCashReceived || ""} onChange={(e) => setTotalCashReceived(parseFloat(e.target.value) || 0)} placeholder="0.00" /></div>
+          <div className="form-group"><label className="form-label">Cash Paid Out (GH&#x20B5;) <InfoTooltip text="Physical cash paid out during the day." /></label><input type="number" step="0.01" min="0" value={totalCashPaid || ""} onChange={(e) => setTotalCashPaid(parseFloat(e.target.value) || 0)} placeholder="0.00" /></div>
+          <div className="form-group"><label className="form-label">Commission Earned (GH&#x20B5;) <InfoTooltip text="Commission earned from MoMo transactions during the day." /></label><input type="number" step="0.01" min="0" value={commission || ""} onChange={(e) => setCommission(parseFloat(e.target.value) || 0)} placeholder="0.00" /></div>
+          <div className="form-group"><label className="form-label">Other Cash Received (GH&#x20B5;) <InfoTooltip text="Money received by the business that is not already included in the other fields above." /></label><input type="number" step="0.01" min="0" value={otherIncome || ""} onChange={(e) => setOtherIncome(parseFloat(e.target.value) || 0)} placeholder="0.00" /><p className="form-hint">Example: Owner cash top-up</p></div>
           <div className="flex gap-3"><button onClick={() => setStep(1)} className="btn btn-secondary flex-1">← Back</button><button onClick={() => setStep(3)} className="btn btn-primary flex-1">Next: Expenses →</button></div>
         </div>
       )}
 
       {step === 3 && (
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
-          <h2 className="text-lg font-semibold">Business Expenses</h2>
-          <p className="text-sm text-gray-500">Record money spent on business expenses during the day.</p>
+          <h2 className="text-lg font-semibold">Business Expenses <InfoTooltip text="Money spent from business cash for approved business expenses (e.g. transport, phone/data, stationery, minor repairs)." /></h2>
           {expenses.map((expense, index) => (
             <div key={index} className="flex gap-2 items-start">
               <div className="flex-1"><input type="text" placeholder="Description (e.g. Transport)" value={expense.description} onChange={(e) => updateExpense(index, "description", e.target.value)} /></div>
@@ -200,8 +200,8 @@ export default function DailyAccountFormPage() {
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
           <h2 className="text-lg font-semibold">Ending Balances</h2>
           <p className="text-sm text-gray-500">Count and enter what you actually have at the end of business today.</p>
-          <div className="form-group"><label className="form-label">Ending Balance — MoMo (GH&#x20B5;)</label><input type="number" step="0.01" min="0" value={closingMomoFloat || ""} onChange={(e) => setClosingMomoFloat(parseFloat(e.target.value) || 0)} placeholder="0.00" /><p className="form-hint">How much MoMo money you have at the end of the day.</p></div>
-          <div className="form-group"><label className="form-label">Ending Cash on Hand (GH&#x20B5;)</label><input type="number" step="0.01" min="0" value={closingCash || ""} onChange={(e) => setClosingCash(parseFloat(e.target.value) || 0)} placeholder="0.00" /><p className="form-hint">Physical cash you are holding at the end of the day.</p></div>
+          <div className="form-group"><label className="form-label">Ending Balance — MoMo (GH&#x20B5;) <InfoTooltip text="MoMo money you have at the end of the day." /></label><input type="number" step="0.01" min="0" value={closingMomoFloat || ""} onChange={(e) => setClosingMomoFloat(parseFloat(e.target.value) || 0)} placeholder="0.00" /></div>
+          <div className="form-group"><label className="form-label">Ending Cash on Hand (GH&#x20B5;) <InfoTooltip text="Physical business cash available at the location." /></label><input type="number" step="0.01" min="0" value={closingCash || ""} onChange={(e) => setClosingCash(parseFloat(e.target.value) || 0)} placeholder="0.00" /></div>
           <div className="flex gap-3"><button onClick={() => setStep(3)} className="btn btn-secondary flex-1">← Back</button><button onClick={() => setStep(5)} className="btn btn-primary flex-1">Next: Review →</button></div>
         </div>
       )}
@@ -213,23 +213,22 @@ export default function DailyAccountFormPage() {
             <div className="space-y-3">
               {/* MoMo Balance */}
               <div className="bg-blue-50 rounded-lg p-4">
-                <div className="text-sm text-blue-600 font-medium mb-2">MoMo Balance</div>
+                <div className="text-sm text-blue-600 font-medium mb-2">MoMo Balance <InfoTooltip text="MoMo money reconciliation — what the system expects vs. what you have." /></div>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between"><span>Starting Balance</span><span className="font-mono">{formatCedi(openingMomoFloat)}</span></div>
                   <div className="flex justify-between"><span>Money Added to MoMo</span><span className="font-mono text-green-700">+{formatCedi(totalCashIn)}</span></div>
                   <div className="flex justify-between"><span>Money Paid from MoMo</span><span className="font-mono text-red-700">-{formatCedi(totalCashOut)}</span></div>
-                  <div className="flex justify-between pt-1 border-t border-blue-200 mt-1"><span className="font-medium">Expected Ending Balance</span><span className="font-mono font-medium">{formatCedi(openingMomoFloat + totalCashIn - totalCashOut)}</span></div>
+                  <div className="flex justify-between pt-1 border-t border-blue-200 mt-1"><span className="font-medium">Expected Ending Balance <InfoTooltip text="The balance the system expects after adding money received and subtracting money paid out." /></span><span className="font-mono font-medium">{formatCedi(openingMomoFloat + totalCashIn - totalCashOut)}</span></div>
                   <div className="flex justify-between"><span>Your Ending Balance</span><span className="font-mono">{formatCedi(closingMomoFloat)}</span></div>
                 </div>
                 <div className="mt-2 pt-2 border-t border-blue-200">
-                  <div className="flex justify-between"><span className="text-sm font-medium">Difference</span><span className={`font-mono font-bold ${momoVariance === 0 ? "text-green-600" : "text-red-600"}`}>{momoVariance === 0 ? "GH\u20B5 0.00" : `${momoVariance > 0 ? "+" : "-"}${formatCedi(Math.abs(momoVariance))}`}</span></div>
-                  <p className="text-xs text-blue-500 mt-1">The difference between your ending balance and the amount the system expects.</p>
+                  <div className="flex justify-between"><span className="text-sm font-medium">Difference <InfoTooltip text="The difference between your ending balance and the amount the system expects." /></span><span className={`font-mono font-bold ${momoVariance === 0 ? "text-green-600" : "text-red-600"}`}>{momoVariance === 0 ? "GH\u20B5 0.00" : `${momoVariance > 0 ? "+" : "-"}${formatCedi(Math.abs(momoVariance))}`}</span></div>
                 </div>
               </div>
 
               {/* Cash on Hand */}
               <div className="bg-green-50 rounded-lg p-4">
-                <div className="text-sm text-green-600 font-medium mb-2">Cash on Hand</div>
+                <div className="text-sm text-green-600 font-medium mb-2">Cash on Hand <InfoTooltip text="Physical business cash reconciliation." /></div>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between"><span>Starting Cash</span><span className="font-mono">{formatCedi(openingCash)}</span></div>
                   <div className="flex justify-between"><span>Cash Received</span><span className="font-mono text-green-700">+{formatCedi(totalCashReceived)}</span></div>
@@ -237,18 +236,18 @@ export default function DailyAccountFormPage() {
                   <div className="flex justify-between"><span>Commission Earned</span><span className="font-mono text-green-700">+{formatCedi(commission)}</span></div>
                   <div className="flex justify-between"><span>Other Money Received</span><span className="font-mono text-green-700">+{formatCedi(otherIncome)}</span></div>
                   <div className="flex justify-between"><span>Business Expenses</span><span className="font-mono text-red-700">-{formatCedi(getTotalExpenses())}</span></div>
-                  <div className="flex justify-between pt-1 border-t border-green-200 mt-1"><span className="font-medium">Expected Cash</span><span className="font-mono font-medium">{formatCedi(openingCash + totalCashReceived + commission + otherIncome - totalCashPaid - getTotalExpenses())}</span></div>
+                  <div className="flex justify-between pt-1 border-t border-green-200 mt-1"><span className="font-medium">Expected Cash <InfoTooltip text="The balance the system expects after adding money received and subtracting money paid out." /></span><span className="font-mono font-medium">{formatCedi(openingCash + totalCashReceived + commission + otherIncome - totalCashPaid - getTotalExpenses())}</span></div>
                   <div className="flex justify-between"><span>Your Ending Cash</span><span className="font-mono">{formatCedi(closingCash)}</span></div>
                 </div>
                 <div className="mt-2 pt-2 border-t border-green-200">
-                  <div className="flex justify-between"><span className="text-sm font-medium">Difference</span><span className={`font-mono font-bold ${cashVariance === 0 ? "text-green-600" : "text-red-600"}`}>{cashVariance === 0 ? "GH\u20B5 0.00" : `${cashVariance > 0 ? "+" : "-"}${formatCedi(Math.abs(cashVariance))}`}</span></div>
+                  <div className="flex justify-between"><span className="text-sm font-medium">Difference <InfoTooltip text="The difference between your ending cash and the amount the system expects." /></span><span className={`font-mono font-bold ${cashVariance === 0 ? "text-green-600" : "text-red-600"}`}>{cashVariance === 0 ? "GH\u20B5 0.00" : `${cashVariance > 0 ? "+" : "-"}${formatCedi(Math.abs(cashVariance))}`}</span></div>
                 </div>
               </div>
 
               {/* Total Difference */}
               <div className={`rounded-lg p-4 ${totalVariance === 0 ? "bg-green-100" : "bg-yellow-50 border border-yellow-300"}`}>
                 <div className="flex justify-between items-center">
-                  <span className="font-semibold">Total Difference</span>
+                  <span className="font-semibold">Total Difference <InfoTooltip text="The combined difference between the expected MoMo balance/cash position and the amounts you reported." /></span>
                   <span className={`text-xl font-bold ${totalVariance === 0 ? "text-green-700" : "text-red-700"}`}>{totalVariance === 0 ? "GH\u20B5 0.00" : `${totalVariance > 0 ? "+" : "-"}${formatCedi(Math.abs(totalVariance))}`}</span>
                 </div>
                 <div className="mt-1"><span className={`badge ${totalVariance === 0 ? "badge-green" : "badge-red"}`}>{totalVariance === 0 ? "Balanced" : "⚠ Check Required"}</span></div>
@@ -272,10 +271,9 @@ export default function DailyAccountFormPage() {
 
           <div className="flex gap-3">
             <button onClick={() => setStep(4)} className="btn btn-secondary flex-1">← Back</button>
-            <button onClick={handleSave} className="btn btn-secondary flex-1" disabled={saving}>{saving ? "Saving..." : "Save Draft"}</button>
+            <button onClick={handleSave} className="btn btn-secondary flex-1" disabled={saving}>{saving ? "Saving..." : "Save Draft"} <InfoTooltip text="Save your work and continue later." /></button>
             <button onClick={() => setConfirmOpen(true)} className="btn btn-primary flex-1" disabled={submitting}>Submit Today&apos;s Account</button>
           </div>
-          <p className="text-xs text-gray-400 text-center">Save Draft: save your work and continue later.</p>
         </div>
       )}
 
@@ -284,10 +282,10 @@ export default function DailyAccountFormPage() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-50 px-4" role="dialog" aria-modal="true" aria-labelledby="submit-title">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
             <h2 id="submit-title" className="text-lg font-semibold text-gray-900">Submit today&apos;s account?</h2>
-            <p className="text-sm text-gray-600 mt-2">After submission, the account will become read-only.</p>
+            <p className="text-sm text-gray-600 mt-2">After you submit, this account becomes read-only. Please make sure the figures are correct.</p>
             <div className="flex gap-3 mt-6">
               <button type="button" onClick={() => setConfirmOpen(false)} className="btn btn-secondary flex-1" disabled={submitting}>Cancel</button>
-              <button type="button" onClick={handleSubmit} className="btn btn-primary flex-1" disabled={submitting}>{submitting ? "Submitting..." : "Submit Account"}</button>
+              <button type="button" onClick={handleSubmit} className="btn btn-primary flex-1" disabled={submitting}>{submitting ? "Submitting..." : "Submit Today&apos;s Account"}</button>
             </div>
           </div>
         </div>

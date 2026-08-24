@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import ConfirmSignOutButton from "@/components/ConfirmSignOutButton";
 import RefreshGuard from "@/components/RefreshGuard";
+import SessionMonitor from "@/components/SessionMonitor";
 import WorkspaceSwitcher from "@/components/WorkspaceSwitcher";
 
 export default function WorkerLayout({ children }: { children: React.ReactNode }) {
@@ -12,6 +13,7 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <SessionMonitor />
       <RefreshGuard />
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
         <img

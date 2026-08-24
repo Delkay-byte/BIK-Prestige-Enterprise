@@ -13,6 +13,31 @@
 
 ---
 
+## Session Security Policy
+
+**For security, BIK Prestige automatically signs users out after inactivity or when the application has been left in the background for the configured period.**
+
+| Policy | Value | What Happens |
+|--------|-------|-------------|
+| **Inactivity timeout** | 5 minutes | Warning appears at 60 seconds, then forced sign-out |
+| **Background timeout** | 60 seconds | Switching away from the app starts a 60-second timer |
+| **Absolute session lifetime** | 15 minutes | Forced sign-out regardless of activity |
+
+### What Users Should Know
+- If you don&apos;t interact with the app for 5 minutes, you&apos;ll be signed out
+- If you switch to another app or browser tab for more than 60 seconds, you&apos;ll be signed out
+- After 15 minutes, you must sign in again even if you&apos;re actively working
+- **Save your work before stepping away**
+- Sensitive operations (password resets, withdrawals) require re-entering your password
+
+### For Administrators
+- All session events are logged in the audit trail
+- You can review session timeouts at `/admin/audit`
+- Password resets invalidate all of a user&apos;s sessions
+- Step-up authentication is required for password resets and withdrawals
+
+---
+
 ## 1. Start PostgreSQL (Pilot)
 
 ```bash

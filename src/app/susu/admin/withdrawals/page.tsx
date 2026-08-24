@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getWithdrawals, processWithdrawal } from "@/lib/actions/susu-withdrawal.actions";
 import { searchCustomers } from "@/lib/actions/susu-customer.actions";
 import { formatCedi, formatDateTime } from "@/lib/utils";
+import ReauthDialog from "@/components/ReauthDialog";
 
 interface WithdrawalRecord {
   id: string;
@@ -49,6 +50,8 @@ export default function SusuWithdrawalsPage() {
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showReauth, setShowReauth] = useState(false);
+  const [pendingWithdrawal, setPendingWithdrawal] = useState(false);
 
   useEffect(() => {
     loadWithdrawals();
@@ -81,7 +84,7 @@ export default function SusuWithdrawalsPage() {
     }
   }
 
-  async function handleProcessWithdrawal() {
+  function handleProcessWithdrawal() {
     if (!selectedCustomer) return;
     const account = selectedCustomer.accounts[0];
     if (!account) {
@@ -94,6 +97,19 @@ export default function SusuWithdrawalsPage() {
       setError("Please enter a valid withdrawal amount");
       return;
     }
+
+    // Require reauthentication before withdrawal
+    setPendingWithdrawal(true);
+    setShowReauth(true);
+  }
+
+  async function executeWithdrawal() {
+    if (!selectedCustomer) return;
+    const account = selectedCustomer.accounts[0];
+    if (!account) return;
+
+    const amountNum = parseFloat(withdrawAmount);
+    if (!amountNum || amountNum <= 0) return;
 
     setSubmitting(true);
     setError("");
@@ -124,6 +140,8 @@ export default function SusuWithdrawalsPage() {
       setError("An unexpected error occurred");
     } finally {
       setSubmitting(false);
+      setShowReauth(false);
+      setPendingWithdrawal(false);
     }
   }
 
@@ -151,6 +169,15 @@ export default function SusuWithdrawalsPage() {
           <button onClick={() => setSuccess("")} className="ml-2">✕</button>
         </div>
       )}
+
+      <ReauthDialog
+        open={showReauth}
+        onClose={() => { setShowReauth(false); setPendingWithdrawal(false); }}
+        onConfirmed={executeWithdrawal}
+        title="Confirm your identity"
+        description="For your security, enter your password before completing this withdrawal."
+        actionLabel="Confirm Withdrawal"
+      />
 
       {/* Withdrawal Form */}
       {showForm && (

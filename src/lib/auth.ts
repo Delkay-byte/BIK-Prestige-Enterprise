@@ -15,6 +15,29 @@ function getJwtSecret(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
+// ---------------------------------------------------------------------------
+// Session security policy (server-enforced)
+// ---------------------------------------------------------------------------
+export const SESSION_POLICY = {
+  /** 5 minutes — inactivity timeout */
+  INACTIVITY_TIMEOUT_SECONDS: parseInt(
+    process.env.SESSION_IDLE_TIMEOUT_SECONDS || "300",
+    10
+  ),
+  /** 60 seconds — background/hidden-page grace */
+  BACKGROUND_TIMEOUT_SECONDS: parseInt(
+    process.env.SESSION_BACKGROUND_TIMEOUT_SECONDS || "60",
+    10
+  ),
+  /** 15 minutes — absolute session lifetime */
+  ABSOLUTE_TIMEOUT_SECONDS: parseInt(
+    process.env.SESSION_ABSOLUTE_TIMEOUT_SECONDS || "900",
+    10
+  ),
+  /** Warning shown 60 seconds before inactivity expiry */
+  WARNING_BEFORE_SECONDS: 60,
+} as const;
+
 /**
  * MODULE-SCOPED SESSION ARCHITECTURE
  *
@@ -44,8 +67,6 @@ export const SESSION_COOKIES: Record<ModuleName, string> = {
 };
 export const SELECTION_COOKIE_NAME = "bik-workspace-select";
 
-const TOKEN_EXPIRY = "24h";
-
 export interface JwtPayload {
   userId: string;
   email: string;
@@ -56,6 +77,12 @@ export interface JwtPayload {
   collectorId?: string;
   forcePasswordReset?: boolean;
   tokenVersion?: number;
+  /** Epoch seconds — when this token was issued (server-authoritative) */
+  iat?: number;
+  /** Epoch seconds — absolute expiry timestamp */
+  exp?: number;
+  /** Epoch seconds — last recorded meaningful activity */
+  lastActivityAt?: number;
 }
 
 /** Short-lived token issued after login when the user must pick a workspace. */
@@ -78,10 +105,17 @@ export async function verifyPassword(
 }
 
 export async function createToken(payload: JwtPayload): Promise<string> {
-  return new SignJWT(payload as unknown as Record<string, unknown>)
+  const now = Math.floor(Date.now() / 1000);
+  const absoluteExpiry = now + SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS;
+  return new SignJWT({
+    ...payload,
+    iat: now,
+    exp: absoluteExpiry,
+    lastActivityAt: now,
+  } as unknown as Record<string, unknown>)
     .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(TOKEN_EXPIRY)
+    .setIssuedAt(now)
+    .setExpirationTime(absoluteExpiry)
     .sign(getJwtSecret());
 }
 
@@ -103,17 +137,69 @@ export async function verifyToken<T = JwtPayload>(token: string): Promise<T | nu
 }
 
 // ---------------------------------------------------------------------------
+// Server-side session validation
+// ---------------------------------------------------------------------------
+
+export type SessionStatus =
+  | "valid"
+  | "inactivity_expired"
+  | "absolute_expired"
+  | "background_expired"
+  | "invalid";
+
+/**
+ * Check whether a JWT payload is still valid against the server-side
+ * session policy.  All timers are enforced here — the client cannot
+ * manipulate them.
+ */
+export function validateSessionTiming(payload: JwtPayload): SessionStatus {
+  const now = Math.floor(Date.now() / 1000);
+
+  // 1. Absolute lifetime
+  if (payload.exp && now > payload.exp) {
+    return "absolute_expired";
+  }
+
+  // 2. Inactivity timeout
+  const lastActivity = payload.lastActivityAt ?? payload.iat ?? 0;
+  if (now - lastActivity > SESSION_POLICY.INACTIVITY_TIMEOUT_SECONDS) {
+    return "inactivity_expired";
+  }
+
+  return "valid";
+}
+
+/**
+ * Create a refreshed token with the current timestamp as lastActivityAt.
+ * The absolute expiry (exp) is NOT extended — only inactivity resets.
+ */
+export async function refreshLastActivity(payload: JwtPayload): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const iat = payload.iat ?? now;
+  const exp = payload.exp ?? now + SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS;
+  return new SignJWT({
+    ...payload,
+    lastActivityAt: now,
+  } as unknown as Record<string, unknown>)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt(iat)
+    .setExpirationTime(exp)
+    .sign(getJwtSecret());
+}
+
+// ---------------------------------------------------------------------------
 // Cookie management
 // ---------------------------------------------------------------------------
 
 async function setSessionCookie(name: string, token: string) {
   const cookieStore = await cookies();
+  // maxAge matches the absolute timeout so the cookie is also cleaned by the browser
   cookieStore.set(name, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24,
+    maxAge: SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS + 60, // small buffer for clock skew
   });
 }
 
@@ -162,6 +248,13 @@ function normalizePayload(payload: JwtPayload): JwtPayload {
           ? ["susu"]
           : [],
     tokenVersion: typeof payload.tokenVersion === "number" ? payload.tokenVersion : 0,
+    iat: typeof payload.iat === "number" ? payload.iat : Math.floor(Date.now() / 1000),
+    exp: typeof payload.exp === "number"
+      ? payload.exp
+      : Math.floor(Date.now() / 1000) + SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS,
+    lastActivityAt: typeof payload.lastActivityAt === "number"
+      ? payload.lastActivityAt
+      : (typeof payload.iat === "number" ? payload.iat : Math.floor(Date.now() / 1000)),
   };
 }
 
@@ -172,7 +265,12 @@ async function readModuleCookie(module: ModuleName): Promise<JwtPayload | null> 
   const scoped = cookieStore.get(name)?.value;
   if (scoped) {
     const payload = await verifyToken<JwtPayload>(scoped);
-    return payload?.userId ? normalizePayload(payload) : null;
+    if (!payload?.userId) return null;
+    const normalized = normalizePayload(payload);
+    // Server-side session timing enforcement
+    const status = validateSessionTiming(normalized);
+    if (status !== "valid") return null;
+    return normalized;
   }
 
   // Graceful fallback to pre-hardening sessions until the next login.
@@ -180,7 +278,10 @@ async function readModuleCookie(module: ModuleName): Promise<JwtPayload | null> 
   if (!legacy) return null;
   const payload = await verifyToken<JwtPayload>(legacy);
   if (!payload?.userId || !legacyRoleMatchesModule(payload.role, module)) return null;
-  return normalizePayload(payload);
+  const normalized = normalizePayload(payload);
+  const status = validateSessionTiming(normalized);
+  if (status !== "valid") return null;
+  return normalized;
 }
 
 export async function getAdminSession(): Promise<JwtPayload | null> {
@@ -217,10 +318,57 @@ export async function isSessionCurrent(payload: JwtPayload): Promise<boolean> {
       select: { tokenVersion: true, status: true },
     });
     if (!user || user.status !== "active") return false;
-    return user.tokenVersion === (payload.tokenVersion ?? 0);
+    if (user.tokenVersion !== (payload.tokenVersion ?? 0)) return false;
+    // Server-side timing enforcement
+    const timingStatus = validateSessionTiming(payload);
+    return timingStatus === "valid";
   } catch {
     return false;
   }
+}
+
+/**
+ * Refresh a session cookie with updated lastActivityAt.
+ * Returns the new token so the caller can set it.
+ */
+export async function refreshSession(module: ModuleName): Promise<string | null> {
+  const cookieStore = await cookies();
+  const name = SESSION_COOKIES[module];
+  const token = cookieStore.get(name)?.value;
+  if (!token) return null;
+  const payload = await verifyToken<JwtPayload>(token);
+  if (!payload?.userId) return null;
+  const normalized = normalizePayload(payload);
+  const status = validateSessionTiming(normalized);
+  if (status !== "valid") return null;
+  const newToken = await refreshLastActivity(normalized);
+  cookieStore.set(name, newToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS + 60,
+  });
+  return newToken;
+}
+
+/**
+ * Get the current session status for the active module.
+ * Used by client-side session monitor to display warnings.
+ */
+export async function getCurrentSessionStatus(): Promise<{
+  status: SessionStatus;
+  secondsUntilInactivity: number;
+  secondsUntilAbsolute: number;
+} | null> {
+  const user = await getAnyAuthUser();
+  if (!user) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const lastActivity = user.lastActivityAt ?? user.iat ?? now;
+  const secondsUntilInactivity = Math.max(0, SESSION_POLICY.INACTIVITY_TIMEOUT_SECONDS - (now - lastActivity));
+  const secondsUntilAbsolute = Math.max(0, (user.exp ?? now + SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS) - now);
+  const status = validateSessionTiming(user);
+  return { status, secondsUntilInactivity, secondsUntilAbsolute };
 }
 
 // ---------------------------------------------------------------------------
