@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { getContributions, recordContribution } from "@/lib/actions/susu-contribution.actions";
@@ -76,7 +77,7 @@ export default function SusuContributionsPage() {
       });
       setContributions(result.contributions as unknown as Contribution[]);
       setPagination(result.pagination);
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       /* ignore */
     } finally {
       setLoading(false);
@@ -87,7 +88,7 @@ export default function SusuContributionsPage() {
     try {
       const data = await getCollectors();
       setCollectors(data as unknown as CollectorOption[]);
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       /* ignore */
     }
   }
@@ -101,7 +102,7 @@ export default function SusuContributionsPage() {
     try {
       const results = await searchCustomers(query);
       setSearchResults(results as unknown as CustomerSearchResult[]);
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       /* ignore */
     }
   }
@@ -147,7 +148,7 @@ export default function SusuContributionsPage() {
       } else {
         setError(result.error || "Failed to record contribution");
       }
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       setError("An unexpected error occurred");
     } finally {
       setSubmitting(false);

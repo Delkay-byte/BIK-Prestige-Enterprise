@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/utils";
@@ -31,7 +32,7 @@ export default function AuditLogPage() {
         setLogs(data.logs);
         setTotal(data.total);
       }
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       /* ignore */
     } finally {
       setLoading(false);

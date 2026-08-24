@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -40,7 +41,7 @@ export default function WorkerDetailPage() {
     try {
       const [workerData, locationsData] = await Promise.all([getWorkerById(params.id as string), getActiveLocations()]);
       setWorker(workerData as unknown as WorkerDetail); setLocations(locationsData as Location[]);
-    } catch { setError("Failed to load worker data"); } finally { setLoading(false); }
+    } catch (err) { if (isRedirectError(err)) throw err; setError("Failed to load worker data"); } finally { setLoading(false); }
   }
 
   async function handleUpdate(formData: FormData) {
@@ -49,7 +50,7 @@ export default function WorkerDetailPage() {
       const result = await updateWorker(params.id as string, formData);
       if (result.success) { setSuccess("Worker updated successfully"); setEditing(false); loadData(); }
       else setError(result.error || "Failed to update worker");
-    } catch { setError("An unexpected error occurred"); } finally { setSubmitting(false); }
+    } catch (err) { if (isRedirectError(err)) throw err; setError("An unexpected error occurred"); } finally { setSubmitting(false); }
   }
 
   function handleResetPassword(formData: FormData) {
@@ -65,7 +66,7 @@ export default function WorkerDetailPage() {
       const result = await resetWorkerPassword(params.id as string, pendingResetData);
       if (result.success) { setSuccess("Temporary password created. The user must change this password after first login — existing sessions were signed out."); setResettingPassword(false); loadData(); }
       else setError(result.error || "Failed to reset password");
-    } catch { setError("An unexpected error occurred"); } finally { setSubmitting(false); setShowReauth(false); setPendingResetData(null); }
+    } catch (err) { if (isRedirectError(err)) throw err; setError("An unexpected error occurred"); } finally { setSubmitting(false); setShowReauth(false); setPendingResetData(null); }
   }
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="spinner"></div></div>;

@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { Fragment, useEffect, useState } from "react";
 import {
@@ -45,7 +46,7 @@ export default function SusuCollectorsPage() {
       const [data, locs] = await Promise.all([getCollectors(), getActiveLocations().catch(() => [])]);
       setCollectors(data as unknown as CollectorData[]);
       setLocations(locs as unknown as LocationOption[]);
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       setError("Failed to load collectors");
     } finally {
       setLoading(false);
@@ -65,7 +66,7 @@ export default function SusuCollectorsPage() {
       } else {
         setError(result.error || "Failed to create collector");
       }
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       setError("An unexpected error occurred");
     } finally {
       setSubmitting(false);
@@ -90,7 +91,7 @@ export default function SusuCollectorsPage() {
       } else {
         setError(result.error || "Failed to reset password");
       }
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       setError("An unexpected error occurred");
     } finally {
       setSubmitting(false);
@@ -112,7 +113,7 @@ export default function SusuCollectorsPage() {
       } else {
         setError(result.error || "Failed to update MoMo capability");
       }
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       setError("An unexpected error occurred");
     } finally {
       setSubmitting(false);

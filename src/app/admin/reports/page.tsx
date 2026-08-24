@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { getDailyAccounts } from "@/lib/actions/daily-account.actions";
@@ -33,7 +34,7 @@ export default function ReportsPage() {
     try {
       const data = await getLocations();
       setLocations((data as Array<{ id: string; name: string; code: string }>).map((l) => ({ id: l.id, name: l.name, code: l.code })));
-    } catch { /* ignore */ }
+    } catch (err) { if (isRedirectError(err)) throw err; /* ignore */ }
   }
 
   async function loadAccounts() {
@@ -41,7 +42,7 @@ export default function ReportsPage() {
     try {
       const result = await getDailyAccounts({ page, limit: 15, locationId: locationId || undefined, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined });
       setAccounts(result.accounts as unknown as Account[]); setPagination(result.pagination);
-    } catch { /* ignore */ } finally { setLoading(false); }
+    } catch (err) { if (isRedirectError(err)) throw err; /* ignore */ } finally { setLoading(false); }
   }
 
   useEffect(() => { loadLocations(); }, []);

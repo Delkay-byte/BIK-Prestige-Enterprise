@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -39,7 +40,7 @@ export default function ReportDetailPage() {
       const result = await reviewDailyAccount(account.id);
       if (result.success) { setSuccess("Report reviewed successfully"); loadAccount(); }
       else setError(result.error || "Failed to review report");
-    } catch { setError("An unexpected error occurred"); } finally { setReviewing(false); }
+    } catch (err) { if (isRedirectError(err)) throw err; setError("An unexpected error occurred"); } finally { setReviewing(false); }
   }
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="spinner"></div></div>;

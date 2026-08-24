@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -43,7 +44,7 @@ export default function WorkerDashboardPage() {
 
       const accountsData = await getWorkerDailyAccounts();
       setAccounts(accountsData as unknown as DailyAccount[]);
-    } catch { setError("Failed to load dashboard"); }
+    } catch (err) { if (isRedirectError(err)) throw err; setError("Failed to load dashboard"); }
     finally { setLoading(false); }
   }
 
@@ -59,7 +60,7 @@ export default function WorkerDashboardPage() {
         const account = result.data as { id: string };
         router.push(`/worker/daily/${account.id}`);
       } else { setError(result.error || "Failed to create daily account"); }
-    } catch { setError("An unexpected error occurred"); }
+    } catch (err) { if (isRedirectError(err)) throw err; setError("An unexpected error occurred"); }
     finally { setCreating(false); }
   }
 

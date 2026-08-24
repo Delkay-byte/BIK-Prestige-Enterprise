@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { getContributions } from "@/lib/actions/susu-contribution.actions";
@@ -55,7 +56,7 @@ export default function SusuReportsPage() {
         setWithdrawals(result.withdrawals as unknown as typeof withdrawals);
         setPagination(result.pagination);
       }
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       /* ignore */    } finally {
       setLoading(false);
     }

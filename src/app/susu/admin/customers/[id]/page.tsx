@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -64,7 +65,7 @@ export default function SusuCustomerDetailPage() {
     try {
       const data = await getCustomerById(params.id as string);
       setCustomer(data as unknown as CustomerDetail);
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       setError("Failed to load customer");
     } finally {
       setLoading(false);

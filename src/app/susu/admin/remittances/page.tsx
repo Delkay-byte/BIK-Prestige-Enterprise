@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import {
@@ -54,7 +55,7 @@ export default function SusuRemittancesPage() {
       const result = await getRemittances({ page, limit: 15 });
       setRemittances(result.remittances as unknown as RemittanceRecord[]);
       setPagination(result.pagination);
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       /* ignore */
     } finally {
       setLoading(false);
@@ -65,7 +66,7 @@ export default function SusuRemittancesPage() {
     try {
       const data = await getCollectors();
       setCollectors(data as unknown as CollectorOption[]);
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       /* ignore */
     }
   }
@@ -106,7 +107,7 @@ export default function SusuRemittancesPage() {
       } else {
         setError(result.error || "Failed to record remittance");
       }
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       setError("An unexpected error occurred");
     } finally {
       setSubmitting(false);

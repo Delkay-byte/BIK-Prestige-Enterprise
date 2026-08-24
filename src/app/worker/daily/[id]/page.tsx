@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -62,7 +63,7 @@ export default function DailyAccountFormPage() {
       if (data.expenses && data.expenses.length > 0) {
         setExpenses(data.expenses.map((e) => ({ description: e.description, amount: Number(e.amount) })));
       }
-    } catch { setError("Failed to load account"); } finally { setLoading(false); }
+    } catch (err) { if (isRedirectError(err)) throw err; setError("Failed to load account"); } finally { setLoading(false); }
   }
 
   useEffect(() => { loadAccount(); }, [params.id]);
@@ -99,7 +100,7 @@ export default function DailyAccountFormPage() {
       const result = await saveDailyAccount(params.id as string, formData);
       if (result.success) setSuccess("Draft saved successfully — you can continue later.");
       else setError(result.error || "Failed to save");
-    } catch { setError("An unexpected error occurred"); } finally { setSaving(false); }
+    } catch (err) { if (isRedirectError(err)) throw err; setError("An unexpected error occurred"); } finally { setSaving(false); }
   }
 
   async function handleSubmit() {
@@ -111,7 +112,7 @@ export default function DailyAccountFormPage() {
       const submitResult = await submitDailyAccount(params.id as string);
       if (submitResult.success) router.push("/worker/dashboard");
       else setError(submitResult.error || "Failed to submit");
-    } catch { setError("An unexpected error occurred"); } finally { setSubmitting(false); setConfirmOpen(false); }
+    } catch (err) { if (isRedirectError(err)) throw err; setError("An unexpected error occurred"); } finally { setSubmitting(false); setConfirmOpen(false); }
   }
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="spinner"></div></div>;

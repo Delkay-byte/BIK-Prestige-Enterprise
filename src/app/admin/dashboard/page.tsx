@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { getAdminDashboardStats } from "@/lib/actions/daily-account.actions";
@@ -51,7 +52,7 @@ export default function AdminDashboardPage() {
       ]);
       setMomoStats(momo);
       setSusuStats(susu);
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       setError("Failed to load dashboard data");
     } finally {
       setLoading(false);

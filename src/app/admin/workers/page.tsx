@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { getWorkers, createWorker, toggleWorkerStatus } from "@/lib/actions/worker.actions";
@@ -28,7 +29,7 @@ export default function WorkersPage() {
     try {
       const [workersData, locationsData] = await Promise.all([getWorkers(), getActiveLocations()]);
       setWorkers(workersData as unknown as Worker[]); setLocations(locationsData as Location[]);
-    } catch { setError("Failed to load data"); } finally { setLoading(false); }
+    } catch (err) { if (isRedirectError(err)) throw err; setError("Failed to load data"); } finally { setLoading(false); }
   }
 
   async function handleCreate(formData: FormData) {
@@ -37,7 +38,7 @@ export default function WorkersPage() {
       const result = await createWorker(formData);
       if (result.success) { setSuccess("Temporary password created — the worker must change it after first login. Share these credentials securely."); setShowForm(false); loadData(); }
       else setError(result.error || "Failed to create worker");
-    } catch { setError("An unexpected error occurred"); } finally { setSubmitting(false); }
+    } catch (err) { if (isRedirectError(err)) throw err; setError("An unexpected error occurred"); } finally { setSubmitting(false); }
   }
 
   async function handleToggleStatus(workerId: string, currentStatus: string) {

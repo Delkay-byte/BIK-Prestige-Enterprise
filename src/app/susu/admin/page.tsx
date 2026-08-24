@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { getSusuDashboardStats } from "@/lib/actions/susu-dashboard.actions";
@@ -30,7 +31,7 @@ export default function SusuAdminOverviewPage() {
     try {
       const data = await getSusuDashboardStats();
       setStats(data);
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       setError("Failed to load dashboard data");
     } finally {
       setLoading(false);

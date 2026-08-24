@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { getCollectorDashboardStats } from "@/lib/actions/susu-dashboard.actions";
@@ -67,7 +68,7 @@ export default function CollectorDashboardPage() {
         const dashboardData = await getCollectorDashboardStats(authUser.userId);
         setData(dashboardData as DashboardData | null);
       }
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       setError("Failed to load dashboard");
     } finally {
       setLoading(false);
@@ -105,7 +106,7 @@ export default function CollectorDashboardPage() {
       } else {
         setError(result.error || "Failed to record");
       }
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       setError("An unexpected error occurred");
     } finally {
       setSubmitting(false);

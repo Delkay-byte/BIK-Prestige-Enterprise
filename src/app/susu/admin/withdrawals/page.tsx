@@ -1,4 +1,5 @@
 "use client";
+import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { getWithdrawals, processWithdrawal } from "@/lib/actions/susu-withdrawal.actions";
@@ -63,7 +64,7 @@ export default function SusuWithdrawalsPage() {
       const result = await getWithdrawals({ page, limit: 15 });
       setWithdrawals(result.withdrawals as unknown as WithdrawalRecord[]);
       setPagination(result.pagination);
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       /* ignore */
     } finally {
       setLoading(false);
@@ -79,7 +80,7 @@ export default function SusuWithdrawalsPage() {
     try {
       const results = await searchCustomers(query);
       setSearchResults(results as unknown as CustomerSearchResult[]);
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       /* ignore */
     }
   }
@@ -136,7 +137,7 @@ export default function SusuWithdrawalsPage() {
       } else {
         setError(result.error || "Failed to process withdrawal");
       }
-    } catch {
+    } catch (err) { if (isRedirectError(err)) throw err;
       setError("An unexpected error occurred");
     } finally {
       setSubmitting(false);
