@@ -1,10 +1,21 @@
 "use client";
 import { isRedirectError } from "@/lib/errors";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { getCollectorDashboardStats } from "@/lib/actions/susu-dashboard.actions";
 import { recordContribution } from "@/lib/actions/susu-contribution.actions";
 import { formatCedi, getGreeting, getDailyQuote } from "@/lib/utils";
+import {
+  addTransaction,
+  getPendingTransactions,
+  getSyncedTransactions,
+  getFailedTransactions,
+  cacheCustomers,
+  type OfflineTransaction,
+  type CachedCustomer,
+} from "@/lib/offline/store";
+import { getOrCreateDeviceId } from "@/lib/offline/device";
+import { syncPendingTransactions, checkConnectivity, startAutoSync, stopAutoSync, type SyncResult } from "@/lib/offline/sync";
 
 interface ToVisitCustomer {
   accountId: string;
@@ -47,12 +58,15 @@ interface UserInfo {
   fullName: string;
 }
 
+type SortOption = "name" | "amount" | "days";
+type FilterOption = "all" | "visit" | "collected" | "pending";
+
 function formatTime(isoString: string): string {
   const d = new Date(isoString);
   return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
-type SortOption = "name" | "amount" | "days";
+const OFFLINE_ENABLED = process.env.NEXT_PUBLIC_OFFLINE_COLLECTIONS_ENABLED === "true";
 
 export default function CollectorDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -61,19 +75,99 @@ export default function CollectorDashboardPage() {
   const [error, setError] = useState("");
   const [quote] = useState(() => getDailyQuote("susu"));
 
+  // Offline state
+  const [isOnline, setIsOnline] = useState(true);
+  const [pendingTxs, setPendingTxs] = useState<OfflineTransaction[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [deviceId, setDeviceId] = useState<string>("");
+  const [lastSyncTime, setLastSyncTime] = useState<string>("");
+
   // UI state
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "visit" | "collected">("all");
+  const [filter, setFilter] = useState<FilterOption>("all");
   const [sortBy, setSortBy] = useState<SortOption>("amount");
 
-  // Collection recording state
+  // Collection recording
   const [recordingFor, setRecordingFor] = useState<ToVisitCustomer | null>(null);
   const [collectAmount, setCollectAmount] = useState("");
   const [collectNotes, setCollectNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
 
-  useEffect(() => { loadData(); }, []);
+  // Initialize
+  useEffect(() => {
+    loadData();
+    if (OFFLINE_ENABLED) {
+      initOffline();
+    }
+    return () => { if (OFFLINE_ENABLED) stopAutoSync(); };
+  }, []);
+
+  // Online/offline listener
+  useEffect(() => {
+    if (!OFFLINE_ENABLED) return;
+    const handleOnline = () => { setIsOnline(true); attemptSync(); };
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    setIsOnline(navigator.onLine);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  async function initOffline() {
+    const did = await getOrCreateDeviceId();
+    setDeviceId(did);
+    await refreshPendingTxs();
+    startAutoSync(handleSyncResults);
+    // Cache customer data for offline viewing
+    if (data) {
+      const customers: CachedCustomer[] = data.toVisit.map((c) => ({
+        accountId: c.accountId,
+        customerName: c.customerName,
+        customerIdCode: c.customerIdCode,
+        dailyContribution: c.dailyContribution,
+        outstandingDays: c.outstandingDays,
+        expectedAmount: c.expectedAmount,
+        lastSynced: new Date().toISOString(),
+      }));
+      await cacheCustomers(customers);
+    }
+  }
+
+  const handleSyncResults = useCallback((results: SyncResult[]) => {
+    const syncedCount = results.filter((r) => r.success).length;
+    const failedCount = results.filter((r) => !r.success).length;
+    if (syncedCount > 0) {
+      setSuccess(`${syncedCount} collection${syncedCount !== 1 ? "s" : ""} synced successfully`);
+      loadData();
+    }
+    if (failedCount > 0) {
+      setError(`${failedCount} collection${failedCount !== 1 ? "s" : ""} need${failedCount === 1 ? "s" : ""} attention`);
+    }
+    refreshPendingTxs();
+  }, []);
+
+  async function refreshPendingTxs() {
+    const pending = await getPendingTransactions();
+    setPendingTxs(pending);
+  }
+
+  async function attemptSync() {
+    if (!navigator.onLine) return;
+    const connected = await checkConnectivity();
+    if (!connected) return;
+    setSyncing(true);
+    try {
+      const results = await syncPendingTransactions();
+      handleSyncResults(results);
+    } finally {
+      setSyncing(false);
+      setLastSyncTime(new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }));
+    }
+  }
 
   async function loadData() {
     try {
@@ -97,20 +191,60 @@ export default function CollectorDashboardPage() {
     try {
       const amountNum = parseFloat(collectAmount);
       if (!amountNum || amountNum <= 0) { setError("Enter a valid amount"); return; }
-      const result = await recordContribution({
-        accountId: recordingFor.accountId, amount: amountNum, channel: "collector",
-        notes: collectNotes || undefined,
-      });
-      if (result.success) {
-        const resultData = result.data as { daysAllocated: number };
-        setSuccess(`${recordingFor.customerName}: ${formatCedi(amountNum)} — ${resultData.daysAllocated} day(s) covered`);
+
+      // Try online first
+      if (navigator.onLine) {
+        try {
+          const result = await recordContribution({
+            accountId: recordingFor.accountId, amount: amountNum, channel: "collector",
+            notes: collectNotes || undefined,
+          });
+          if (result.success) {
+            const resultData = result.data as { daysAllocated: number };
+            setSuccess(`${recordingFor.customerName}: ${formatCedi(amountNum)} — ${resultData.daysAllocated} day(s) covered ✓`);
+            setRecordingFor(null); setCollectAmount(""); setCollectNotes("");
+            loadData();
+            return;
+          }
+        } catch {
+          // Online failed — fall through to offline queue
+        }
+      }
+
+      // Offline: queue the transaction
+      if (OFFLINE_ENABLED && deviceId) {
+        const idempotencyKey = `${deviceId}-${crypto.randomUUID()}`;
+        const tx: OfflineTransaction = {
+          id: crypto.randomUUID(),
+          deviceId,
+          userId: user?.userId || "",
+          type: "contribution",
+          idempotencyKey,
+          payload: JSON.stringify({
+            accountId: recordingFor.accountId,
+            amount: amountNum,
+            channel: "collector",
+            notes: collectNotes || undefined,
+          }),
+          status: "pending_sync",
+          retryCount: 0,
+          maxRetries: 5,
+          failureReason: null,
+          serverResult: null,
+          localTimestamp: new Date().toISOString(),
+          syncStartedAt: null,
+          syncedAt: null,
+          createdAt: new Date().toISOString(),
+        };
+        await addTransaction(tx);
+        setSuccess(`${recordingFor.customerName}: ${formatCedi(amountNum)} — Saved on device ⏳`);
         setRecordingFor(null); setCollectAmount(""); setCollectNotes("");
-        loadData();
+        refreshPendingTxs();
       } else {
-        setError(result.error || "Unable to record. Please try again.");
+        setError("Unable to record. Check your connection and try again.");
       }
     } catch (err) { if (isRedirectError(err)) throw err;
-      setError("We couldn't confirm this collection. Please check the customer's history.");
+      setError("Something went wrong. Please try again.");
     } finally { setSubmitting(false); }
   }
 
@@ -120,10 +254,7 @@ export default function CollectorDashboardPage() {
     let list = data.toVisit;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      list = list.filter(c =>
-        c.customerName.toLowerCase().includes(q) ||
-        c.customerIdCode.toLowerCase().includes(q)
-      );
+      list = list.filter(c => c.customerName.toLowerCase().includes(q) || c.customerIdCode.toLowerCase().includes(q));
     }
     if (sortBy === "name") list = [...list].sort((a, b) => a.customerName.localeCompare(b.customerName));
     else if (sortBy === "amount") list = [...list].sort((a, b) => b.expectedAmount - a.expectedAmount);
@@ -136,10 +267,7 @@ export default function CollectorDashboardPage() {
     let list = data.collectedToday;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      list = list.filter(c =>
-        c.customerName.toLowerCase().includes(q) ||
-        c.customerIdCode.toLowerCase().includes(q)
-      );
+      list = list.filter(c => c.customerName.toLowerCase().includes(q) || c.customerIdCode.toLowerCase().includes(q));
     }
     return [...list].sort((a, b) => new Date(b.collectedAt).getTime() - new Date(a.collectedAt).getTime());
   }, [data, searchQuery]);
@@ -151,29 +279,58 @@ export default function CollectorDashboardPage() {
   const collected = data?.collectedToday.length || 0;
   const remaining = data?.toVisit.length || 0;
   const allDone = remaining === 0 && totalAssigned > 0;
-
   const showVisit = filter === "all" || filter === "visit";
   const showCollected = filter === "all" || filter === "collected";
+  const showPending = filter === "pending";
 
   return (
     <div className="space-y-5">
       {/* Header with greeting */}
       <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-        <h1 className="text-2xl font-bold text-gray-900">
-          {getGreeting()}, {user?.fullName || "Collector"} 👋
-        </h1>
-        <p className="text-sm text-green-600 italic mt-1">&ldquo;{quote}&rdquo;</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{getGreeting()}, {user?.fullName || "Collector"} 👋</h1>
+            <p className="text-sm text-green-600 italic mt-1">&ldquo;{quote}&rdquo;</p>
+          </div>
+          {OFFLINE_ENABLED && (
+            <div className="text-right">
+              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${isOnline ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-700"}`}>
+                <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-green-500" : "bg-yellow-500"}`}></span>
+                {isOnline ? "Online" : "Offline"}
+              </div>
+              {lastSyncTime && <p className="text-[10px] text-gray-400 mt-1">Last sync: {lastSyncTime}</p>}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Messages */}
       {success && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">✓ {success}</div>}
       {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
 
+      {/* Pending Sync Banner */}
+      {OFFLINE_ENABLED && pendingTxs.length > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-yellow-600 text-lg">⏳</span>
+            <div>
+              <p className="font-medium text-yellow-800">{pendingTxs.length} collection{pendingTxs.length !== 1 ? "s" : ""} waiting to sync</p>
+              <p className="text-xs text-yellow-600">These will sync automatically when connection returns</p>
+            </div>
+          </div>
+          {isOnline && (
+            <button onClick={attemptSync} disabled={syncing} className="btn btn-secondary btn-sm">
+              {syncing ? "Syncing..." : "Sync Now"}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Progress */}
       {data && (
         <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
           <h2 className="text-lg font-semibold mb-3">Today&apos;s Collections</h2>
-          {allDone ? (
+          {allDone && pendingTxs.length === 0 ? (
             <div className="text-center py-2">
               <p className="text-2xl mb-1">✅</p>
               <p className="font-semibold text-green-700">All collections completed!</p>
@@ -204,39 +361,28 @@ export default function CollectorDashboardPage() {
       {data && (
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <div className="flex flex-col sm:flex-row gap-3">
-            {/* Search */}
             <div className="flex-1">
-              <input
-                type="text"
-                placeholder="Search customers..."
-                value={searchQuery}
+              <input type="text" placeholder="Search customers..." value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-400"
-              />
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-400" />
             </div>
-            {/* Filters */}
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
               {(["all", "visit", "collected"] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                    filter === f
-                      ? "bg-green-100 text-green-700"
-                      : "bg-gray-50 text-gray-500 hover:bg-gray-100"
-                  }`}
-                >
+                <button key={f} onClick={() => setFilter(f)}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${filter === f ? "bg-green-100 text-green-700" : "bg-gray-50 text-gray-500 hover:bg-gray-100"}`}>
                   {f === "all" ? "All" : f === "visit" ? "To Visit" : "Collected"}
                 </button>
               ))}
+              {OFFLINE_ENABLED && pendingTxs.length > 0 && (
+                <button onClick={() => setFilter("pending")}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${filter === "pending" ? "bg-yellow-100 text-yellow-700" : "bg-gray-50 text-gray-500 hover:bg-gray-100"}`}>
+                  ⏳ Pending ({pendingTxs.length})
+                </button>
+              )}
             </div>
-            {/* Sort */}
             {showVisit && remaining > 0 && (
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortOption)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-600"
-              >
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortOption)}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-600">
                 <option value="amount">Sort: Amount</option>
                 <option value="days">Sort: Days Due</option>
                 <option value="name">Sort: Name</option>
@@ -263,12 +409,8 @@ export default function CollectorDashboardPage() {
                   </div>
                   <div className="font-semibold text-sm text-green-700">{formatCedi(customer.expectedAmount)}</div>
                 </div>
-                <button
-                  onClick={() => { setRecordingFor(customer); setCollectAmount(String(customer.expectedAmount)); }}
-                  className="btn btn-primary btn-sm w-full mt-3"
-                >
-                  💵 Collect
-                </button>
+                <button onClick={() => { setRecordingFor(customer); setCollectAmount(String(customer.expectedAmount)); }}
+                  className="btn btn-primary btn-sm w-full mt-3">💵 Collect</button>
               </div>
             ))}
           </div>
@@ -277,17 +419,41 @@ export default function CollectorDashboardPage() {
 
       {/* Empty search */}
       {data && showVisit && searchQuery && filteredToVisit.length === 0 && remaining > 0 && (
-        <div className="text-center py-6 text-gray-500">
-          <p className="text-sm">No customers matching &ldquo;{searchQuery}&rdquo;</p>
-        </div>
+        <div className="text-center py-6 text-gray-500"><p className="text-sm">No customers matching &ldquo;{searchQuery}&rdquo;</p></div>
       )}
 
       {/* All caught up */}
-      {data && allDone && (
+      {data && allDone && pendingTxs.length === 0 && (
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-center">
           <p className="text-3xl mb-2">🎉</p>
           <p className="font-medium text-gray-700">All collections completed for today!</p>
           <p className="text-sm text-gray-500 mt-1">{totalAssigned} of {totalAssigned} collected</p>
+        </div>
+      )}
+
+      {/* Pending Sync List */}
+      {showPending && pendingTxs.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-1 px-1">⏳ Pending Sync</h2>
+          <p className="text-sm text-gray-500 mb-3 px-1">{pendingTxs.length} collection{pendingTxs.length !== 1 ? "s" : ""} saved on device</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {pendingTxs.map((tx) => {
+              const payload = JSON.parse(tx.payload);
+              const cust = data?.toVisit.find((c) => c.accountId === payload.accountId) || data?.collectedToday.find((c) => c.accountId === payload.accountId);
+              return (
+                <div key={tx.id} className="bg-yellow-50 rounded-xl p-4 border border-yellow-200">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-yellow-600">⏳</span>
+                    <span className="font-medium text-sm truncate">{cust?.customerName || "Customer"}</span>
+                  </div>
+                  <div className="font-semibold text-sm text-yellow-800">{formatCedi(payload.amount)}</div>
+                  <div className="text-xs text-yellow-600 mt-1">
+                    Saved {formatTime(tx.localTimestamp)} · {tx.retryCount > 0 ? `Retry ${tx.retryCount}/${tx.maxRetries}` : "Waiting"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -301,7 +467,7 @@ export default function CollectorDashboardPage() {
               <div key={customer.accountId} className="bg-green-50 rounded-xl p-4 border border-green-100">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-green-600">✓</span>
-                  <span className="font-medium text-sm truncate" title={customer.customerName}>{customer.customerName}</span>
+                  <span className="font-medium text-sm truncate">{customer.customerName}</span>
                 </div>
                 <div className="text-xs text-gray-400 mb-2">{customer.customerIdCode}</div>
                 <div className="font-semibold text-sm text-green-700">{formatCedi(customer.amountCollected)}</div>
@@ -349,6 +515,11 @@ export default function CollectorDashboardPage() {
                 {recordingFor.outstandingDays} day{recordingFor.outstandingDays !== 1 ? "s" : ""} due · Expected: {formatCedi(recordingFor.expectedAmount)}
               </div>
             </div>
+            {!isOnline && OFFLINE_ENABLED && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 mb-4 text-xs text-yellow-700">
+                ⚠️ You&apos;re offline. This will be saved on your device and synced when you reconnect.
+              </div>
+            )}
             <div className="form-group">
               <label className="form-label">Amount Received (GH₵)</label>
               <input type="number" step="0.01" min="0.01" value={collectAmount}
@@ -363,11 +534,9 @@ export default function CollectorDashboardPage() {
             </div>
             <div className="flex gap-3 mt-4">
               <button onClick={handleRecordCollection} className="btn btn-primary flex-1" disabled={submitting}>
-                {submitting ? "Recording..." : "✅ Record"}
+                {submitting ? "Recording..." : !isOnline && OFFLINE_ENABLED ? "💾 Save on Device" : "✅ Record"}
               </button>
-              <button onClick={() => { setRecordingFor(null); setCollectAmount(""); }} className="btn btn-secondary flex-1">
-                Cancel
-              </button>
+              <button onClick={() => { setRecordingFor(null); setCollectAmount(""); }} className="btn btn-secondary flex-1">Cancel</button>
             </div>
           </div>
         </div>

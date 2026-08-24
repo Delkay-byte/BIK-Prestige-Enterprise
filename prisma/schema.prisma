@@ -32,6 +32,7 @@ model User {
   dailyAccounts        DailyAccount[]
   collector            Collector?
   passwordResetTokens  PasswordResetToken[]
+  devices              DeviceEnrollment[]
 
   @@index([role])
   @@index([status])
@@ -354,4 +355,52 @@ model PasswordResetToken {
   @@index([userId])
   @@index([tokenHash])
   @@index([expiresAt])
+}
+
+// =====================
+// OFFLINE / DEVICE ENROLLMENT
+// =====================
+
+model DeviceEnrollment {
+  id           String   @id @default(cuid())
+  userId       String
+  deviceId     String   @unique // Client-generated unique device identifier
+  deviceName   String?          // Human-readable device label
+  module       String                 // "momo" | "susu"
+  status       String   @default("active") // active | revoked
+  lastSyncAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([deviceId])
+  @@index([status])
+}
+
+model OfflineTransaction {
+  id              String   @id @default(cuid())
+  deviceId        String
+  userId          String
+  type            String                 // "contribution" | "daily_account_draft"
+  idempotencyKey  String   @unique      // deviceId + UUID — server dedup key
+  payload         String                 // JSON-encrypted transaction data
+  status          String   @default("pending_sync") // pending_sync | syncing | synced | failed
+  retryCount      Int      @default(0)
+  maxRetries      Int      @default(5)
+  failureReason   String?
+  serverResult    String?                // JSON server response after sync
+  localTimestamp  DateTime @default(now()) // When created on device
+  syncStartedAt   DateTime?
+  syncedAt        DateTime?              // When server confirmed
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([deviceId])
+  @@index([userId])
+  @@index([idempotencyKey])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
 }
