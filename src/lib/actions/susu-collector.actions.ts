@@ -48,6 +48,7 @@ export async function createCollector(formData: FormData): Promise<ActionRespons
       role: "collector",
       status: "active",
       passwordHash,
+      susuEnabled: true,
       forcePasswordReset: true,
     },
   });
@@ -66,6 +67,105 @@ export async function createCollector(formData: FormData): Promise<ActionRespons
 
   revalidatePath("/susu/admin/collectors");
   return { success: true, data: { user, collector } };
+}
+
+/**
+ * Admin password reset for a collector's account.
+ * Invalidates the collector's existing sessions and forces a password
+ * change at next login. The temporary password is never displayed again.
+ */
+export async function resetCollectorPassword(collectorId: string, formData: FormData): Promise<ActionResponse> {
+  const admin = await requireAdmin();
+
+  const collector = await db.collector.findUnique({
+    where: { id: collectorId },
+    select: { userId: true },
+  });
+  if (!collector) {
+    return { success: false, error: "Collector not found" };
+  }
+
+  const newPassword = formData.get("newPassword") as string;
+  if (!newPassword || newPassword.length < 8) {
+    return { success: false, error: "Password must be at least 8 characters" };
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+
+  await db.user.update({
+    where: { id: collector.userId },
+    data: {
+      passwordHash,
+      forcePasswordReset: true,
+      tokenVersion: { increment: 1 }, // invalidate the user's existing sessions
+    },
+  });
+
+  await createAuditLog({
+    userId: admin.userId,
+    action: "user.password_reset",
+    entityType: "user",
+    entityId: collector.userId,
+    details: { sessionsInvalidated: true, viaCollectorId: collectorId },
+  });
+
+  revalidatePath("/susu/admin/collectors");
+  return { success: true };
+}
+
+/**
+ * Toggle a person's MoMo module capability from the collectors page.
+ * Enabling requires an assigned MoMo location; one account gains both modules.
+ */
+export async function setMomoCapability(
+  userId: string,
+  enabled: boolean,
+  locationId?: string
+): Promise<ActionResponse> {
+  const admin = await requireAdmin();
+
+  const target = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, momoEnabled: true },
+  });
+  if (!target || target.role === "admin") {
+    return { success: false, error: "User not found" };
+  }
+  if (target.momoEnabled === enabled) {
+    return { success: true };
+  }
+  if (enabled) {
+    if (!locationId) {
+      return { success: false, error: "An assigned location is required to enable MoMo" };
+    }
+    const location = await db.location.findUnique({ where: { id: locationId } });
+    if (!location || location.status !== "active") {
+      return { success: false, error: "Selected location does not exist or is inactive" };
+    }
+  }
+
+  await db.user.update({
+    where: { id: userId },
+    data: { momoEnabled: enabled, ...(enabled ? { locationId } : {}) },
+  });
+
+  // Bump token version so capability changes take effect on next request.
+  await db.user.update({
+    where: { id: userId },
+    data: { tokenVersion: { increment: 1 } },
+  });
+
+  await createAuditLog({
+    userId: admin.userId,
+    action: "user.module_assignment_changed",
+    entityType: "user",
+    entityId: userId,
+    details: { module: "momo", enabled, ...(locationId ? { locationId } : {}) },
+  });
+
+  revalidatePath("/susu/admin/collectors");
+  revalidatePath("/admin/workers");
+  return { success: true };
 }
 
 /**

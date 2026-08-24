@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getWorkerDailyAccounts, createDailyAccount } from "@/lib/actions/daily-account.actions";
 import { formatDate, getGreeting, getTodayString } from "@/lib/utils";
 import Link from "next/link";
@@ -15,6 +16,7 @@ interface UserInfo { userId: string; email: string; role: string; locationId?: s
 interface FullUser { id: string; fullName: string; email: string; location?: { id: string; name: string; code: string } | null; locationId?: string; }
 
 export default function WorkerDashboardPage() {
+  const router = useRouter();
   const [userName, setUserName] = useState("");
   const [locationName, setLocationName] = useState("");
   const [accounts, setAccounts] = useState<DailyAccount[]>([]);
@@ -55,7 +57,7 @@ export default function WorkerDashboardPage() {
       const result = await createDailyAccount(locationId, today);
       if (result.success) {
         const account = result.data as { id: string };
-        window.location.href = `/worker/daily/${account.id}`;
+        router.push(`/worker/daily/${account.id}`);
       } else { setError(result.error || "Failed to create daily account"); }
     } catch { setError("An unexpected error occurred"); }
     finally { setCreating(false); }

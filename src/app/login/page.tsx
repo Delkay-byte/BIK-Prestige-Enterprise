@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { login } from "@/lib/actions/auth.actions";
+import PasswordInput from "@/components/PasswordInput";
 
 export default function LoginPage() {
   const [error, setError] = useState("");
@@ -49,7 +50,7 @@ export default function LoginPage() {
             </div>
             <div className="form-group">
               <label className="form-label" htmlFor="password">Password</label>
-              <input type="password" id="password" name="password" placeholder="Enter your password" required autoComplete="current-password" />
+              <PasswordInput id="password" name="password" placeholder="Enter your password" required autoComplete="current-password" />
             </div>
             <button type="submit" className="btn btn-primary w-full mt-2" disabled={loading}>
               {loading ? (

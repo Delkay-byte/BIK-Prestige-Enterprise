@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getWorkerById, updateWorker, resetWorkerPassword } from "@/lib/actions/worker.actions";
 import { getActiveLocations } from "@/lib/actions/location.actions";
+import PasswordInput from "@/components/PasswordInput";
 
 interface WorkerDetail {
   id: string; fullName: string; email: string; phone?: string | null; role: string;
   status: string; forcePasswordReset: boolean; createdAt: Date;
+  momoEnabled?: boolean; susuEnabled?: boolean;
   location?: { id: string; name: string; code: string } | null;
   dailyAccounts: Array<{
     id: string; businessDate: Date; status: string;
@@ -51,7 +53,7 @@ export default function WorkerDetailPage() {
     setSubmitting(true); setError(""); setSuccess("");
     try {
       const result = await resetWorkerPassword(params.id as string, formData);
-      if (result.success) { setSuccess("Password reset successfully. Share the new password with the worker."); setResettingPassword(false); loadData(); }
+      if (result.success) { setSuccess("Temporary password created. The user must change this password after first login — existing sessions were signed out."); setResettingPassword(false); loadData(); }
       else setError(result.error || "Failed to reset password");
     } catch { setError("An unexpected error occurred"); } finally { setSubmitting(false); }
   }
@@ -85,6 +87,13 @@ export default function WorkerDetailPage() {
               <div className="form-group"><label className="form-label">Phone</label><input type="tel" name="phone" defaultValue={worker.phone || ""} /></div>
               <div className="form-group"><label className="form-label">Location *</label><select name="locationId" defaultValue={worker.location?.id || ""} required><option value="">Select a location</option>{locations.map((loc) => <option key={loc.id} value={loc.id}>{loc.name} ({loc.code})</option>)}</select></div>
               <div className="form-group"><label className="form-label">Status</label><select name="status" defaultValue={worker.status}><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
+              <div className="form-group md:col-span-2">
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" name="susuCollector" defaultChecked={worker.susuEnabled} className="w-4 h-4" />
+                  Also register this person as a Susu collector (dual-role, same account)
+                </label>
+                <p className="form-hint">One person, one login — module capabilities are assignments on the same account.</p>
+              </div>
             </div>
             <div className="flex gap-3 mt-4">
               <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? "Saving..." : "Save Changes"}</button>
@@ -98,7 +107,7 @@ export default function WorkerDetailPage() {
         <div className="card mb-6 border-yellow-200">
           <h2 className="text-lg font-semibold mb-4">Reset Password</h2>
           <form action={handleResetPassword}>
-            <div className="form-group"><label className="form-label">New Password *</label><input type="password" name="newPassword" placeholder="Min 8 chars, 1 uppercase, 1 number" required /><p className="form-hint">Worker will be prompted to change on next login.</p></div>
+            <div className="form-group"><label className="form-label">New Temporary Password *</label><PasswordInput name="newPassword" placeholder="Min 8 chars, 1 uppercase, 1 number" required autoComplete="new-password" /><p className="form-hint">Temporary password created — the user must change this password after first login.</p></div>
             <div className="flex gap-3 mt-4">
               <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? "Resetting..." : "Reset Password"}</button>
               <button type="button" className="btn btn-secondary" onClick={() => setResettingPassword(false)}>Cancel</button>
@@ -114,6 +123,7 @@ export default function WorkerDetailPage() {
             <div><dt className="text-sm text-gray-500">Status</dt><dd><span className={`badge ${worker.status === "active" ? "badge-green" : "badge-red"}`}>{worker.status === "active" ? "Active" : "Inactive"}</span></dd></div>
             {worker.location && <div><dt className="text-sm text-gray-500">Assigned Location</dt><dd>{worker.location.name} ({worker.location.code})</dd></div>}
             <div><dt className="text-sm text-gray-500">Created</dt><dd>{new Date(worker.createdAt).toLocaleDateString()}</dd></div>
+            <div><dt className="text-sm text-gray-500">Modules</dt><dd className="text-sm">MoMo{worker.susuEnabled ? " · Susu (collector)" : ""}</dd></div>
             <div><dt className="text-sm text-gray-500">Force Password Reset</dt><dd>{worker.forcePasswordReset ? "Yes" : "No"}</dd></div>
           </dl>
         </div>

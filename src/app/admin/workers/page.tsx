@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getWorkers, createWorker, toggleWorkerStatus } from "@/lib/actions/worker.actions";
 import { getActiveLocations } from "@/lib/actions/location.actions";
+import PasswordInput from "@/components/PasswordInput";
 
 interface Worker {
   id: string; fullName: string; email: string; phone?: string | null; role: string;
@@ -34,7 +35,7 @@ export default function WorkersPage() {
     setSubmitting(true); setError(""); setSuccess("");
     try {
       const result = await createWorker(formData);
-      if (result.success) { setSuccess("Worker created successfully. Share the credentials with the worker."); setShowForm(false); loadData(); }
+      if (result.success) { setSuccess("Temporary password created — the worker must change it after first login. Share these credentials securely."); setShowForm(false); loadData(); }
       else setError(result.error || "Failed to create worker");
     } catch { setError("An unexpected error occurred"); } finally { setSubmitting(false); }
   }
@@ -71,7 +72,7 @@ export default function WorkersPage() {
               <div className="form-group"><label className="form-label">Full Name *</label><input type="text" name="fullName" placeholder="Enter full name" required /></div>
               <div className="form-group"><label className="form-label">Email *</label><input type="email" name="email" placeholder="worker@example.com" required /></div>
               <div className="form-group"><label className="form-label">Phone</label><input type="tel" name="phone" placeholder="+233 XX XXX XXXX" /></div>
-              <div className="form-group"><label className="form-label">Temporary Password *</label><input type="password" name="password" placeholder="Min 8 chars, 1 uppercase, 1 number" required /><p className="form-hint">Worker will be prompted to change on first login.</p></div>
+              <div className="form-group"><label className="form-label">Temporary Password *</label><PasswordInput name="password" placeholder="Min 8 chars, 1 uppercase, 1 number" required autoComplete="new-password" /><p className="form-hint">Temporary password created — the user must change this password after first login.</p></div>
               <div className="form-group"><label className="form-label">Assigned Location *</label><select name="locationId" required><option value="">Select a location</option>{locations.map((loc) => <option key={loc.id} value={loc.id}>{loc.name} ({loc.code})</option>)}</select></div>
               <div className="form-group"><label className="form-label">Status</label><select name="status" defaultValue="active"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
             </div>

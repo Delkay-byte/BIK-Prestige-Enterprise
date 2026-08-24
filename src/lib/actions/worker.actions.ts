@@ -51,6 +51,7 @@ export async function createWorker(formData: FormData): Promise<ActionResponse> 
       phone: validated.data.phone,
       passwordHash,
       role: "worker",
+      momoEnabled: true,
       locationId: validated.data.locationId,
       status: validated.data.status,
       forcePasswordReset: true,
@@ -94,17 +95,51 @@ export async function updateWorker(workerId: string, formData: FormData): Promis
     return { success: false, error: "A user with this email already exists" };
   }
 
-  const worker = await db.user.update({
+  // Module capability: optional Susu collector registration for this person.
+  // One person, one account — capabilities are assignments, not new users.
+  const wantsSusu = formData.get("susuCollector") === "on";
+  const target = await db.user.findUnique({
     where: { id: workerId },
-    data: {
-      fullName: validated.data.fullName,
-      email: validated.data.email,
-      phone: validated.data.phone,
-      locationId: validated.data.locationId,
-      status: validated.data.status,
-    },
-    select: { id: true, fullName: true, email: true, role: true, status: true, locationId: true },
+    include: { collector: true },
   });
+  if (!target) {
+    return { success: false, error: "Worker not found" };
+  }
+  const susuChanged = target.susuEnabled !== wantsSusu;
+
+  const worker = await db.$transaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id: workerId },
+      data: {
+        fullName: validated.data.fullName,
+        email: validated.data.email,
+        phone: validated.data.phone,
+        locationId: validated.data.locationId,
+        status: validated.data.status,
+        susuEnabled: wantsSusu,
+      },
+      select: { id: true, fullName: true, email: true, role: true, status: true, locationId: true },
+    });
+
+    if (wantsSusu && !target.collector) {
+      await tx.collector.create({ data: { userId: workerId, status: "active" } });
+    }
+    if (!wantsSusu && target.collector && target.collector.status === "active") {
+      await tx.collector.update({ where: { id: target.collector.id }, data: { status: "inactive" } });
+    }
+
+    return updated;
+  });
+
+  if (susuChanged) {
+    await createAuditLog({
+      userId: admin.userId,
+      action: "user.module_assignment_changed",
+      entityType: "user",
+      entityId: workerId,
+      details: { module: "susu", enabled: wantsSusu },
+    });
+  }
 
   await createAuditLog({
     userId: admin.userId,
@@ -122,6 +157,16 @@ export async function updateWorker(workerId: string, formData: FormData): Promis
 export async function resetWorkerPassword(workerId: string, formData: FormData): Promise<ActionResponse> {
   const admin = await requireAdmin();
 
+  // Target user is resolved server-side from the admin's request context —
+  // never from arbitrary browser-supplied role/ID combinations.
+  const target = await db.user.findUnique({
+    where: { id: workerId },
+    select: { id: true, role: true },
+  });
+  if (!target || (target.role !== "worker" && target.role !== "collector")) {
+    return { success: false, error: "Worker not found" };
+  }
+
   const newPassword = formData.get("newPassword") as string;
   if (!newPassword || newPassword.length < 8) {
     return { success: false, error: "Password must be at least 8 characters" };
@@ -131,7 +176,11 @@ export async function resetWorkerPassword(workerId: string, formData: FormData):
 
   await db.user.update({
     where: { id: workerId },
-    data: { passwordHash, forcePasswordReset: true },
+    data: {
+      passwordHash,
+      forcePasswordReset: true,
+      tokenVersion: { increment: 1 }, // invalidate the user's existing sessions
+    },
   });
 
   await createAuditLog({
@@ -139,6 +188,7 @@ export async function resetWorkerPassword(workerId: string, formData: FormData):
     action: "user.password_reset",
     entityType: "user",
     entityId: workerId,
+    details: { sessionsInvalidated: true },
   });
 
   revalidatePath("/admin/workers");

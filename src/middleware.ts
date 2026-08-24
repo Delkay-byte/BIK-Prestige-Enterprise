@@ -12,11 +12,55 @@ if (!JWT_SECRET_RAW) {
 }
 const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_RAW);
 
-const PUBLIC_ROUTES = ["/login", "/api/health", "/api/diag", "/settings", "/change-password"];
+/**
+ * Module-scoped session architecture (see src/lib/auth.ts):
+ *
+ *   bik-admin-session     → administration module
+ *   bik-worker-session    → MoMo module
+ *   bik-collector-session → Susu module
+ *   bik-workspace-select  → short-lived dual-role workspace choice
+ *
+ * Each login writes ONLY its own module cookie, so an admin signed in on one
+ * tab is never overwritten by a worker/collector signing in on another tab.
+ */
+
+const SESSION_COOKIES = {
+  admin: "bik-admin-session",
+  momo: "bik-worker-session",
+  susu: "bik-collector-session",
+} as const;
+
+const SELECTION_COOKIE = "bik-workspace-select";
+const LEGACY_COOKIE = "bik-prestige-token";
+
+const PUBLIC_ROUTES = ["/login", "/api/health", "/api/diag"];
+
+interface TokenClaims {
+  role?: string;
+  modules?: string[];
+  forcePasswordReset?: boolean;
+}
+
+function claimsMatchModule(claims: TokenClaims, module: keyof typeof SESSION_COOKIES): boolean {
+  const explicitModules = Array.isArray(claims.modules) ? claims.modules : undefined;
+  if (module === "admin") return claims.role === "admin";
+  if (explicitModules) return explicitModules.includes(module);
+  // Legacy tokens carry only the primary role
+  return module === "momo" ? claims.role === "worker" : claims.role === "collector";
+}
+
+async function readClaims(token: string | undefined): Promise<TokenClaims | null> {
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    return payload as unknown as TokenClaims;
+  } catch {
+    return null;
+  }
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const isApi = pathname.startsWith("/api");
 
   // Allow public routes (login, health check)
   if (PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
@@ -28,60 +72,89 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = request.cookies.get("bik-prestige-token")?.value;
-
-  if (!token) {
-    if (isApi) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    return NextResponse.redirect(new URL("/login", request.url));
+  // API routes perform their own authorization — never leak HTML redirects.
+  if (pathname.startsWith("/api")) {
+    return NextResponse.next();
   }
 
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    const role = payload.role as string;
+  const res = () => {
+    const r = NextResponse.next();
+    // Protected pages must never be served from browser cache/back navigation.
+    r.headers.set("Cache-Control", "no-store, must-revalidate");
+    return r;
+  };
 
-    // Role-based page route guards (not applied to API routes — API routes do their own checks)
-    if (!isApi) {
-      if (role === "admin") {
-        if (pathname.startsWith("/worker") || pathname.startsWith("/collector")) {
-          return NextResponse.redirect(new URL("/admin/dashboard", request.url));
-        }
-      }
+  const redirectTo = (path: string) => NextResponse.redirect(new URL(path, request.url));
 
-      if (role === "worker") {
-        if (pathname.startsWith("/admin") || pathname.startsWith("/collector") || pathname.startsWith("/susu")) {
-          return NextResponse.redirect(new URL("/worker/dashboard", request.url));
-        }
-      }
+  // Which module does this path belong to?
+  let pathModule: keyof typeof SESSION_COOKIES | null = null;
+  if (pathname.startsWith("/admin") || pathname.startsWith("/susu")) pathModule = "admin";
+  else if (pathname.startsWith("/worker")) pathModule = "momo";
+  else if (pathname.startsWith("/collector")) pathModule = "susu";
 
-      if (role === "collector") {
-        if (pathname.startsWith("/admin") || pathname.startsWith("/worker") || pathname.startsWith("/susu/admin")) {
-          return NextResponse.redirect(new URL("/collector/dashboard", request.url));
-        }
-      }
-
-      if (pathname === "/") {
-        return NextResponse.redirect(
-          new URL(role === "admin" ? "/admin/dashboard" : "/worker/dashboard", request.url)
+  // Root: send the person to any active workspace.
+  if (pathname === "/") {
+    for (const [mod, name] of Object.entries(SESSION_COOKIES)) {
+      const claims = await readClaims(request.cookies.get(name)?.value);
+      if (claims && claimsMatchModule(claims, mod as keyof typeof SESSION_COOKIES)) {
+        return redirectTo(
+          mod === "admin" ? "/admin/dashboard" : mod === "momo" ? "/worker/dashboard" : "/collector/dashboard"
         );
       }
     }
-
-    // Force password change for users with forcePasswordReset flag
-      // Allow access to /settings and /change-password so they can change it
-      const forceReset = payload.forcePasswordReset as boolean | undefined;
-      if (forceReset && !pathname.startsWith("/settings") && !pathname.startsWith("/change-password")) {
-        return NextResponse.redirect(new URL("/settings?tab=password", request.url));
-      }
-
-    return NextResponse.next();
-  } catch {
-    if (isApi) {
-      return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 });
-    }
-    return NextResponse.redirect(new URL("/login", request.url));
+    return redirectTo("/login");
   }
+
+  // Dual-role workspace selection page requires a valid selection token.
+  if (pathname.startsWith("/select-workspace")) {
+    const claims = await readClaims(request.cookies.get(SELECTION_COOKIE)?.value);
+    if (!claims) return redirectTo("/login");
+    return res();
+  }
+
+  // Shared legacy pages keep working with any active module session.
+  if (pathname.startsWith("/settings") || pathname.startsWith("/change-password")) {
+    const anySession = await Promise.all(
+      Object.values(SESSION_COOKIES).map((name) => readClaims(request.cookies.get(name)?.value))
+    );
+    const legacy = await readClaims(request.cookies.get(LEGACY_COOKIE)?.value);
+    if (!anySession.some(Boolean) && !legacy) return redirectTo("/login");
+    return res();
+  }
+
+  if (!pathModule) {
+    // Unknown protected route — require at least some session.
+    const anySession = await Promise.all(
+      Object.values(SESSION_COOKIES).map((name) => readClaims(request.cookies.get(name)?.value))
+    );
+    if (!anySession.some(Boolean)) return redirectTo("/login");
+    return res();
+  }
+
+  // Resolve this module's session: scoped cookie first, then legacy fallback.
+  let claims = await readClaims(request.cookies.get(SESSION_COOKIES[pathModule])?.value);
+  if (!claims) {
+    const legacy = await readClaims(request.cookies.get(LEGACY_COOKIE)?.value);
+    if (legacy && claimsMatchModule(legacy, pathModule)) claims = legacy;
+  }
+
+  if (!claims || !claimsMatchModule(claims, pathModule)) {
+    return redirectTo("/login");
+  }
+
+  // First-login mandatory password change: only module settings/logout allowed.
+  if (claims.forcePasswordReset) {
+    const settingsRoot =
+      pathModule === "admin" ? "/admin/settings" : pathModule === "momo" ? "/worker/settings" : "/collector/settings";
+    const allowed =
+      pathname.startsWith(settingsRoot) ||
+      pathname.startsWith("/select-workspace");
+    if (!allowed) {
+      return redirectTo(`${settingsRoot}?tab=password`);
+    }
+  }
+
+  return res();
 }
 
 export const config = {

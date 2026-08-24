@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { logout } from "@/lib/actions/auth.actions";
+import ConfirmSignOutButton from "@/components/ConfirmSignOutButton";
+import RefreshGuard from "@/components/RefreshGuard";
 
 interface NavItem {
   href: string;
@@ -40,7 +41,7 @@ const navSections: { title: string; items: NavItem[] }[] = [
     title: "Administration",
     items: [
       { href: "/admin/audit", label: "Audit Log", icon: "📝" },
-      { href: "/settings", label: "Settings", icon: "⚙️" },
+      { href: "/admin/settings", label: "Settings", icon: "⚙️" },
     ],
   },
 ];
@@ -48,10 +49,6 @@ const navSections: { title: string; items: NavItem[] }[] = [
 export default function SusuAdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  async function handleLogout() {
-    await logout();
-  }
 
   function isActive(href: string) {
     if (href === "/admin/dashboard") return pathname === href;
@@ -62,6 +59,7 @@ export default function SusuAdminLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <RefreshGuard />
       {/* Mobile header */}
       <div className="md:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-600 hover:text-gray-800">
@@ -111,10 +109,7 @@ export default function SusuAdminLayout({ children }: { children: React.ReactNod
           ))}
         </nav>
         <div className="p-4 border-t border-gray-200">
-          <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 w-full transition-colors">
-            <span className="text-lg">🚪</span>
-            Sign Out
-          </button>
+          <ConfirmSignOutButton className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 w-full transition-colors" />
         </div>
       </aside>
 

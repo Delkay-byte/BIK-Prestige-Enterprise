@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { changePassword } from "@/lib/actions/auth.actions";
+import PasswordInput from "@/components/PasswordInput";
 
 const DASHBOARD_BY_ROLE: Record<string, string> = {
   admin: "/admin/dashboard",
@@ -12,8 +13,11 @@ const DASHBOARD_BY_ROLE: Record<string, string> = {
 
 export default function ChangePasswordForm({
   onSuccess,
+  dashboardPath,
 }: {
   onSuccess?: () => void;
+  /** Where to go after a successful change when no onSuccess handler is given. */
+  dashboardPath?: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
@@ -47,12 +51,17 @@ export default function ChangePasswordForm({
           onSuccess();
           return;
         }
-        // Determine role from the refreshed session and go to the dashboard.
+        if (dashboardPath) {
+          setTimeout(() => router.push(dashboardPath), 1200);
+          return;
+        }
+        // Determine the workspace from the refreshed session.
         try {
           const meRes = await fetch("/api/auth/me");
           if (meRes.ok) {
             const me = await meRes.json();
-            const target = DASHBOARD_BY_ROLE[me.role] || "/login";
+            const target =
+              DASHBOARD_BY_ROLE[me.role] || (me.role === "admin" ? "/admin/dashboard" : "/login");
             setTimeout(() => router.push(target), 1200);
             return;
           }
@@ -90,40 +99,34 @@ export default function ChangePasswordForm({
           <label className="form-label" htmlFor="currentPassword">
             Current Password
           </label>
-          <input
-            type="password"
+          <PasswordInput
             id="currentPassword"
             name="currentPassword"
             required
             autoComplete="current-password"
-           
           />
         </div>
         <div className="form-group">
           <label className="form-label" htmlFor="newPassword">
             New Password
           </label>
-          <input
-            type="password"
+          <PasswordInput
             id="newPassword"
             name="newPassword"
             required
             autoComplete="new-password"
             placeholder="Min 8 characters"
-           
           />
         </div>
         <div className="form-group">
           <label className="form-label" htmlFor="confirmPassword">
             Confirm New Password
           </label>
-          <input
-            type="password"
+          <PasswordInput
             id="confirmPassword"
             name="confirmPassword"
             required
             autoComplete="new-password"
-           
           />
         </div>
         <div className="flex gap-3 mt-4">

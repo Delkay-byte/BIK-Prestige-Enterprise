@@ -4,20 +4,36 @@ import { db } from "@/lib/db";
 import {
   hashPassword,
   verifyPassword,
-  createToken,
-  setAuthCookie,
-  removeAuthCookie,
-  getAuthUser,
+  setModuleSession,
+  setSelectionSession,
+  clearAllSessions,
+  clearModuleSession,
+  getAdminSession,
+  getMomoSession,
+  getSusuSession,
+  getSelectionUser,
+  isSessionCurrent,
+  createSelectionToken,
+  SELECTION_COOKIE_NAME,
+  type JwtPayload,
+  type ModuleName,
 } from "@/lib/auth";
 import { loginSchema } from "@/lib/validations";
 import { createAuditLog } from "@/lib/audit";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
+import { cookies } from "next/headers";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export interface ActionResponse {
   success: boolean;
   error?: string;
+}
+
+function dashboardPathFor(module: ModuleName): string {
+  if (module === "admin") return "/admin/dashboard";
+  if (module === "momo") return "/worker/dashboard";
+  return "/collector/dashboard";
 }
 
 export async function login(
@@ -63,15 +79,9 @@ export async function login(
     return { success: false, error: "Invalid email or password" };
   }
 
-  const token = await createToken({
-    userId: user.id,
-    email: user.email,
-    role: user.role as "admin" | "worker" | "collector",
-    locationId: user.locationId ?? undefined,
-    forcePasswordReset: user.forcePasswordReset,
-  });
-
-  await setAuthCookie(token);
+  const modules: ("momo" | "susu")[] = [];
+  if (user.momoEnabled) modules.push("momo");
+  if (user.susuEnabled) modules.push("susu");
 
   await createAuditLog({
     userId: user.id,
@@ -80,40 +90,179 @@ export async function login(
     entityId: user.id,
   });
 
-  // Check if user must change password on first login
-  if (user.forcePasswordReset) {
-    redirect("/settings?tab=password");
+  // Administrators sign into the administration module.
+  if (user.role === "admin") {
+    await issueModuleSession(user.id, "admin");
+    redirect("/admin/dashboard");
   }
 
-  if (user.role === "admin") {
-    redirect("/admin/dashboard");
-  } else if (user.role === "collector") {
-    redirect("/collector/dashboard");
-  } else {
-    redirect("/worker/dashboard");
+  if (modules.length === 0) {
+    return {
+      success: false,
+      error: "Your account is not registered for any module. Please contact the administrator.",
+    };
   }
+
+  if (modules.length === 1) {
+    const mod = modules[0];
+    const payload = await issueModuleSession(user.id, mod);
+
+    if (payload.forcePasswordReset) {
+      redirect(`${settingsPathFor(mod)}?tab=password`);
+    }
+    redirect(dashboardPathFor(mod));
+  }
+
+  // Dual-role: let the person choose their workspace. No arbitrary default.
+  const selectionToken = await createSelectionToken({
+    userId: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    modules,
+  });
+  await setSelectionSession(selectionToken);
+  redirect("/select-workspace");
+}
+
+function settingsPathFor(module: ModuleName): string {
+  return `/${module === "admin" ? "admin" : module === "momo" ? "worker" : "collector"}/settings`;
+}
+
+async function buildSessionPayload(userId: string): Promise<JwtPayload> {
+  const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
+  const modules: ("momo" | "susu")[] = [];
+  if (user.momoEnabled) modules.push("momo");
+  if (user.susuEnabled) modules.push("susu");
+  return {
+    userId: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    role: user.role as "admin" | "worker" | "collector",
+    modules,
+    locationId: user.locationId ?? undefined,
+    forcePasswordReset: user.forcePasswordReset,
+    tokenVersion: user.tokenVersion,
+  };
+}
+
+/** Issue a fresh JWT for `userId` into the given module's cookie. */
+export async function issueModuleSession(userId: string, module: ModuleName): Promise<JwtPayload> {
+  const payload = await buildSessionPayload(userId);
+  await setModuleSession(module, payload);
+  return payload;
+}
+
+export async function selectWorkspace(
+  module: "momo" | "susu"
+): Promise<ActionResponse> {
+  const selection = await getSelectionUser();
+  if (!selection) {
+    return { success: false, error: "Workspace selection expired. Please sign in again." };
+  }
+  if (!selection.modules.includes(module)) {
+    return { success: false, error: "You are not authorized for this module." };
+  }
+
+  await issueModuleSession(selection.userId, module);
+
+  // The selection token is single-use.
+  (await cookies()).delete(SELECTION_COOKIE_NAME);
+
+  await createAuditLog({
+    userId: selection.userId,
+    action: "auth.workspace_selected",
+    entityType: "user",
+    entityId: selection.userId,
+    details: { module },
+  });
+
+  return { success: true };
+}
+
+/**
+ * Switch between the modules this person is registered for.
+ * Requires an active session in any module belonging to the same account.
+ */
+export async function switchWorkspace(
+  target: "momo" | "susu"
+): Promise<ActionResponse> {
+  const sources: Array<[ModuleName, Awaited<ReturnType<typeof getMomoSession>>]> = [
+    ["momo", await getMomoSession()],
+    ["susu", await getSusuSession()],
+    ["admin", null],
+  ];
+
+  let userId: string | null = null;
+  let sourceModule: ModuleName | null = null;
+  for (const [mod, session] of sources) {
+    if (session && (await isSessionCurrent(session))) {
+      userId = session.userId;
+      sourceModule = mod;
+      break;
+    }
+  }
+
+  if (!userId || !sourceModule || sourceModule === "admin") {
+    return { success: false, error: "Not authenticated" };
+  }
+  if (sourceModule === target) {
+    return { success: true };
+  }
+
+  // Verify the account is genuinely registered for the target module.
+  const payload = await buildSessionPayload(userId);
+  if (!(payload.modules ?? []).includes(target)) {
+    return { success: false, error: "You are not authorized for this module." };
+  }
+
+  await setModuleSession(target, payload);
+  await clearModuleSession(sourceModule);
+
+  await createAuditLog({
+    userId,
+    action: "auth.workspace_switched",
+    entityType: "user",
+    entityId: userId,
+    details: { from: sourceModule, to: target },
+  });
+
+  return { success: true };
 }
 
 export async function logout(): Promise<void> {
-  const user = await getAuthUser();
-  if (user) {
+  const sessions = [await getAdminSession(), await getMomoSession(), await getSusuSession()];
+  const active = sessions.find(Boolean);
+  if (active) {
     await createAuditLog({
-      userId: user.userId,
+      userId: active.userId,
       action: "auth.logout",
       entityType: "user",
-      entityId: user.userId,
+      entityId: active.userId,
     });
   }
-  await removeAuthCookie();
+  await clearAllSessions();
   redirect("/login");
 }
 
 export async function changePassword(
   formData: FormData
 ): Promise<ActionResponse> {
-  const user = await getAuthUser();
-  if (!user) {
+  // Determine which module session is making the request — identity always
+  // comes from the authenticated session, never from browser-supplied IDs.
+  const contexts: Array<{ module: ModuleName; user: JwtPayload | null }> = [
+    { module: "admin", user: await getAdminSession() },
+    { module: "momo", user: await getMomoSession() },
+    { module: "susu", user: await getSusuSession() },
+  ];
+  const context = contexts.find((c) => c.user !== null);
+  if (!context || !context.user) {
     return { success: false, error: "Not authenticated" };
+  }
+  const session = context.user;
+
+  if (!(await isSessionCurrent(session))) {
+    await clearAllSessions();
+    return { success: false, error: "Session expired. Please sign in again." };
   }
 
   const currentPassword = formData.get("currentPassword") as string;
@@ -128,7 +277,7 @@ export async function changePassword(
     return { success: false, error: "Password must be at least 8 characters" };
   }
 
-  const dbUser = await db.user.findUnique({ where: { id: user.userId } });
+  const dbUser = await db.user.findUnique({ where: { id: session.userId } });
   if (!dbUser) {
     return { success: false, error: "User not found" };
   }
@@ -138,29 +287,24 @@ export async function changePassword(
     return { success: false, error: "Current password is incorrect" };
   }
 
+  const wasForced = !!session.forcePasswordReset;
+
   const newHash = await hashPassword(newPassword);
   await db.user.update({
-    where: { id: user.userId },
+    where: { id: session.userId },
     data: { passwordHash: newHash, forcePasswordReset: false },
   });
 
-  // Re-issue the session token so the force-reset flag clears immediately
+  // Re-issue THIS module's session so the force-reset flag clears immediately
   // without requiring the user to log out and back in.
-  const token = await createToken({
-    userId: user.userId,
-    email: user.email,
-    role: user.role,
-    locationId: user.locationId,
-    collectorId: user.collectorId,
-    forcePasswordReset: false,
-  });
-  await setAuthCookie(token);
+  const refreshed = await buildSessionPayload(session.userId);
+  await setModuleSession(context.module, refreshed);
 
   await createAuditLog({
-    userId: user.userId,
-    action: "auth.password_changed",
+    userId: session.userId,
+    action: wasForced ? "auth.first_login_password_changed" : "auth.password_changed",
     entityType: "user",
-    entityId: user.userId,
+    entityId: session.userId,
   });
 
   return { success: true };

@@ -17,10 +17,13 @@ model User {
   email              String   @unique
   fullName           String
   phone              String?
-  role               String   @default("worker") // admin | worker | collector
+  role               String   @default("worker") // admin | worker | collector (primary role)
   status             String   @default("active")
   passwordHash       String
   forcePasswordReset Boolean  @default(false)
+  momoEnabled        Boolean  @default(false) // Module capability: MoMo worker
+  susuEnabled        Boolean  @default(false) // Module capability: Susu collector
+  tokenVersion       Int      @default(0)     // Bumped to invalidate existing sessions
   locationId         String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

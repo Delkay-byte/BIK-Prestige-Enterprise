@@ -1,28 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   getCollectors,
   createCollector,
   toggleCollectorStatus,
+  resetCollectorPassword,
+  setMomoCapability,
 } from "@/lib/actions/susu-collector.actions";
+import { getActiveLocations } from "@/lib/actions/location.actions";
+import PasswordInput from "@/components/PasswordInput";
 
 interface CollectorData {
   id: string;
   status: string;
-  user: { id: string; fullName: string; email: string; phone?: string | null; status: string };
+  user: { id: string; fullName: string; email: string; phone?: string | null; status: string; momoEnabled?: boolean };
   assignments: Array<{ id: string }>;
   contributions: Array<{ id: string; amount: number }>;
   remittances: Array<{ id: string; status: string; expectedAmount: number; remittedAmount: number }>;
 }
 
+interface LocationOption { id: string; name: string; code: string; }
+
 export default function SusuCollectorsPage() {
   const [collectors, setCollectors] = useState<CollectorData[]>([]);
+  const [locations, setLocations] = useState<LocationOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [resetFor, setResetFor] = useState<string | null>(null);
+  const [momoFor, setMomoFor] = useState<string | null>(null);
 
   useEffect(() => {
     loadCollectors();
@@ -30,8 +39,9 @@ export default function SusuCollectorsPage() {
 
   async function loadCollectors() {
     try {
-      const data = await getCollectors();
+      const [data, locs] = await Promise.all([getCollectors(), getActiveLocations().catch(() => [])]);
       setCollectors(data as unknown as CollectorData[]);
+      setLocations(locs as unknown as LocationOption[]);
     } catch {
       setError("Failed to load collectors");
     } finally {
@@ -46,11 +56,50 @@ export default function SusuCollectorsPage() {
     try {
       const result = await createCollector(formData);
       if (result.success) {
-        setSuccess("Collector created successfully");
+        setSuccess("Temporary password created — the collector must change it after first login.");
         setShowForm(false);
         loadCollectors();
       } else {
         setError(result.error || "Failed to create collector");
+      }
+    } catch {
+      setError("An unexpected error occurred");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleResetPassword(collectorId: string, formData: FormData) {
+    setSubmitting(true);
+    setError("");
+    setSuccess("");
+    try {
+      const result = await resetCollectorPassword(collectorId, formData);
+      if (result.success) {
+        setSuccess("Temporary password created. The user must change this password after first login — existing sessions were signed out.");
+        setResetFor(null);
+      } else {
+        setError(result.error || "Failed to reset password");
+      }
+    } catch {
+      setError("An unexpected error occurred");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleMomoToggle(userId: string, enabled: boolean, locationId?: string) {
+    setSubmitting(true);
+    setError("");
+    setSuccess("");
+    try {
+      const result = await setMomoCapability(userId, enabled, locationId);
+      if (result.success) {
+        setSuccess(enabled ? "MoMo module enabled for this account." : "MoMo module disabled for this account.");
+        setMomoFor(null);
+        loadCollectors();
+      } else {
+        setError(result.error || "Failed to update MoMo capability");
       }
     } catch {
       setError("An unexpected error occurred");
@@ -110,7 +159,8 @@ export default function SusuCollectorsPage() {
               </div>
               <div className="form-group">
                 <label className="form-label">Temporary Password *</label>
-                <input type="password" name="password" placeholder="Min 8 chars" required />
+                <PasswordInput name="password" placeholder="Min 8 chars" required autoComplete="new-password" />
+                <p className="form-hint">Temporary password created — the user must change this password after first login.</p>
               </div>
             </div>
             <div className="flex gap-3 mt-4">
@@ -149,7 +199,8 @@ export default function SusuCollectorsPage() {
                   const todayCollected = c.contributions.reduce((sum, col) => sum + Number(col.amount), 0);
                   const lastRemittance = c.remittances[0];
                   return (
-                    <tr key={c.id}>
+                    <Fragment key={c.id}>
+                      <tr>
                       <td>
                         <div className="font-medium">{c.user.fullName}</div>
                         <div className="text-xs text-gray-500">{c.user.email}</div>
@@ -174,22 +225,93 @@ export default function SusuCollectorsPage() {
                         </span>
                       </td>
                       <td>
-                        <button
-                          onClick={async () => {
-                            const newStatus = c.user.status === "active" ? "inactive" : "active";
-                            await toggleCollectorStatus(c.id, newStatus);
-                            loadCollectors();
-                          }}
-                          className={`text-sm ${
-                            c.user.status === "active"
-                              ? "text-red-600 hover:text-red-800"
-                              : "text-green-600 hover:text-green-800"
-                          }`}
-                        >
-                          {c.user.status === "active" ? "Deactivate" : "Activate"}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={async () => {
+                              const newStatus = c.user.status === "active" ? "inactive" : "active";
+                              await toggleCollectorStatus(c.id, newStatus);
+                              loadCollectors();
+                            }}
+                            className={`text-sm ${
+                              c.user.status === "active"
+                                ? "text-red-600 hover:text-red-800"
+                                : "text-green-600 hover:text-green-800"
+                            }`}
+                          >
+                            {c.user.status === "active" ? "Deactivate" : "Activate"}
+                          </button>
+                          <button
+                            onClick={() => { setResetFor(resetFor === c.id ? null : c.id); setMomoFor(null); }}
+                            className="text-sm text-yellow-700 hover:text-yellow-800"
+                          >
+                            Reset Password
+                          </button>
+                          <button
+                            onClick={() => { setMomoFor(momoFor === c.id ? null : c.id); setResetFor(null); }}
+                            className="text-sm text-blue-600 hover:text-blue-800"
+                          >
+                            {c.user.momoEnabled ? "MoMo: On" : "+ MoMo"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
+                    {resetFor === c.id && (
+                      <tr key={`${c.id}-reset`}>
+                        <td colSpan={6} className="bg-yellow-50">
+                          <form action={(fd) => handleResetPassword(c.id, fd)} className="flex flex-wrap items-end gap-3 p-2">
+                            <div className="w-64">
+                              <label className="form-label">New Temporary Password</label>
+                              <PasswordInput name="newPassword" placeholder="Min 8 chars" required autoComplete="new-password" />
+                            </div>
+                            <button type="submit" className="btn btn-primary btn-sm" disabled={submitting}>Reset</button>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setResetFor(null)}>Cancel</button>
+                            <p className="text-xs text-gray-500 w-full">The collector must change this password after first login.</p>
+                          </form>
+                        </td>
+                      </tr>
+                    )}
+                    {momoFor === c.id && (
+                      <tr key={`${c.id}-momo`}>
+                        <td colSpan={6} className="bg-blue-50">
+                          <div className="flex flex-wrap items-end gap-3 p-2">
+                            <div className="w-64">
+                              <label className="form-label">Assigned MoMo Location</label>
+                              <select id={`momo-loc-${c.id}`} className="w-full" defaultValue="">
+                                <option value="">Select a location</option>
+                                {locations.map((loc) => (
+                                  <option key={loc.id} value={loc.id}>{loc.name} ({loc.code})</option>
+                                ))}
+                              </select>
+                            </div>
+                            {c.user.momoEnabled ? (
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-sm"
+                                disabled={submitting}
+                                onClick={() => handleMomoToggle(c.user.id, false)}
+                              >
+                                Disable MoMo
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                disabled={submitting}
+                                onClick={() => {
+                                  const select = document.getElementById(`momo-loc-${c.id}`) as HTMLSelectElement | null;
+                                  handleMomoToggle(c.user.id, true, select?.value || undefined);
+                                }}
+                              >
+                                Enable MoMo
+                              </button>
+                            )}
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setMomoFor(null)}>Cancel</button>
+                            <p className="text-xs text-gray-500 w-full">Same account, same login — this only adds or removes the MoMo module for this person.</p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>
