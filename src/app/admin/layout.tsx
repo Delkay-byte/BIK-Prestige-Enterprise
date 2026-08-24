@@ -4,8 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import ConfirmSignOutButton from "@/components/ConfirmSignOutButton";
-import RefreshGuard from "@/components/RefreshGuard";
-import SessionMonitor from "@/components/SessionMonitor";
 import TabSessionGuard from "@/components/TabSessionGuard";
 
 interface NavItem {
@@ -58,10 +56,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <TabSessionGuard />
-      <SessionMonitor />
-      <RefreshGuard />
       {/* Mobile header */}
       <div className="md:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-600 hover:text-gray-800">
@@ -70,11 +66,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </svg>
         </button>
         <img
-          src="/branding/bik-prestige-icon.svg"
+          src="/branding/bik-prestige-logo.svg"
           alt="BIK Prestige Enterprise"
-          className="h-8 w-8"
-          width={32}
-          height={32}
+          className="h-8 w-auto"
+          width={160}
+          height={80}
         />
         <span className="text-sm text-gray-500">Admin</span>
       </div>
@@ -94,9 +90,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             width={180}
             height={90}
           />
-          <p className="text-xs text-gray-400 mt-2">Built by BloomCore Technologies</p>
         </div>
-        <nav className="p-4">
+        <nav className="p-4 flex-1">
           {navSections.map((section) => (
             <div key={section.title || "main"} className="mb-4">
               {section.title && (
@@ -125,12 +120,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="p-4 border-t border-gray-200">
           <ConfirmSignOutButton className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 w-full transition-colors" />
         </div>
+        <div className="px-6 pb-4">
+          <p className="text-[10px] text-gray-300 text-center">Built by BloomCore Technologies</p>
+        </div>
       </aside>
 
       {/* Main content */}
-      <main className="md:ml-64 min-h-screen">
+      <main className="md:ml-64 flex-1">
         <div className="p-4 md:p-8 max-w-7xl mx-auto">{children}</div>
       </main>
+
+      {/* Footer */}
+      <footer className="md:ml-64 border-t border-gray-200 bg-white">
+        <div className="p-4 text-center">
+          <p className="text-xs text-gray-400">Built by BloomCore Technologies</p>
+        </div>
+      </footer>
     </div>
   );
 }

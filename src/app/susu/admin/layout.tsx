@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import ConfirmSignOutButton from "@/components/ConfirmSignOutButton";
-import RefreshGuard from "@/components/RefreshGuard";
 
 interface NavItem {
   href: string;
@@ -52,14 +51,12 @@ export default function SusuAdminLayout({ children }: { children: React.ReactNod
 
   function isActive(href: string) {
     if (href === "/admin/dashboard") return pathname === href;
-    // Susu overview needs exact match to avoid highlighting on child routes
     if (href === "/susu/admin") return pathname === "/susu/admin";
     return pathname === href || pathname.startsWith(href + "/");
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <RefreshGuard />
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Mobile header */}
       <div className="md:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-600 hover:text-gray-800">
@@ -67,7 +64,13 @@ export default function SusuAdminLayout({ children }: { children: React.ReactNod
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <span className="font-bold text-green-700">BIK Prestige</span>
+        <img
+          src="/branding/bik-prestige-logo.svg"
+          alt="BIK Prestige Enterprise"
+          className="h-8 w-auto"
+          width={160}
+          height={80}
+        />
         <span className="text-sm text-gray-500">Susu Admin</span>
       </div>
 
@@ -79,8 +82,13 @@ export default function SusuAdminLayout({ children }: { children: React.ReactNod
       {/* Sidebar */}
       <aside className={`fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-200 z-50 transform transition-transform md:translate-x-0 overflow-y-auto ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="p-6 border-b border-gray-200">
-          <h1 className="text-lg font-bold text-green-700">BIK Prestige Enterprise</h1>
-          <p className="text-xs text-gray-400 mt-1">Built by BloomCore Technologies</p>
+          <img
+            src="/branding/bik-prestige-logo.svg"
+            alt="BIK Prestige Enterprise"
+            className="h-9 w-auto"
+            width={180}
+            height={90}
+          />
         </div>
         <nav className="p-4">
           {navSections.map((section) => (
@@ -111,12 +119,22 @@ export default function SusuAdminLayout({ children }: { children: React.ReactNod
         <div className="p-4 border-t border-gray-200">
           <ConfirmSignOutButton className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 w-full transition-colors" />
         </div>
+        <div className="px-6 pb-4">
+          <p className="text-[10px] text-gray-300 text-center">Built by BloomCore Technologies</p>
+        </div>
       </aside>
 
       {/* Main content */}
-      <main className="md:ml-64 min-h-screen">
+      <main className="md:ml-64 flex-1">
         <div className="p-4 md:p-8 max-w-7xl mx-auto">{children}</div>
       </main>
+
+      {/* Footer */}
+      <footer className="md:ml-64 border-t border-gray-200 bg-white">
+        <div className="p-4 text-center">
+          <p className="text-xs text-gray-400">Built by BloomCore Technologies</p>
+        </div>
+      </footer>
     </div>
   );
 }

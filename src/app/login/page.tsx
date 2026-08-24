@@ -31,7 +31,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-green-100 px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-green-50 to-green-100 px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <img
@@ -68,14 +68,13 @@ export default function LoginPage() {
               ) : "Sign In"}
             </button>
           </form>
-        </div>
-        <p className="text-center text-xs text-gray-400 mt-6">
-          Built by BloomCore Technologies
-        </p>
-        <p className="text-center text-sm text-gray-500 mt-2">
+        </div>          <p className="text-center text-sm text-gray-500 mt-6">
           Contact your administrator for account access
         </p>
       </div>
+      <p className="text-center text-xs text-gray-400 mt-8">
+        Built by BloomCore Technologies
+      </p>
     </div>
   );
 }
