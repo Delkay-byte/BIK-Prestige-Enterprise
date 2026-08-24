@@ -33,7 +33,7 @@ const SESSION_COOKIES = {
 const SELECTION_COOKIE = "bik-workspace-select";
 const LEGACY_COOKIE = "bik-prestige-token";
 
-const PUBLIC_ROUTES = ["/login", "/api/health", "/api/diag"];
+const PUBLIC_ROUTES = ["/login", "/forgot-password", "/reset-password", "/api/health", "/api/diag"];
 
 interface TokenClaims {
   role?: string;

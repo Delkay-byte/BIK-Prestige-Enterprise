@@ -28,9 +28,10 @@ model User {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  location      Location?     @relation(fields: [locationId], references: [id])
-  dailyAccounts DailyAccount[]
-  collector     Collector?
+  location             Location?              @relation(fields: [locationId], references: [id])
+  dailyAccounts        DailyAccount[]
+  collector            Collector?
+  passwordResetTokens  PasswordResetToken[]
 
   @@index([role])
   @@index([status])
@@ -334,4 +335,23 @@ model CollectorRemittance {
   @@index([status])
   @@index([createdAt])
   @@index([referenceId])
+}
+
+// =====================
+// PASSWORD RECOVERY
+// =====================
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique // SHA-256 hash of the raw token — never store raw token
+  expiresAt DateTime              // Token expires after 15 minutes
+  usedAt    DateTime?             // Null until successfully used
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
 }

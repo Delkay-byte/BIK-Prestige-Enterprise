@@ -5,18 +5,24 @@ import { login } from "@/lib/actions/auth.actions";
 import PasswordInput from "@/components/PasswordInput";
 import { markTabAuthenticated } from "@/components/TabSessionGuard";
 import { isRedirectError } from "@/lib/errors";
+import Link from "next/link";
 
 export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Check for password_reset reason in URL (avoids useSearchParams Suspense issue)
+  const [passwordReset] = useState(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("reason") === "password_reset";
+    }
+    return false;
+  });
+
   async function handleSubmit(formData: FormData) {
     setLoading(true);
     setError("");
     try {
-      // Mark this tab as authenticated BEFORE the server redirect.
-      // sessionStorage is tab-scoped, so a new tab pasting a URL will
-      // NOT have this flag and will be redirected to /login.
       markTabAuthenticated();
       const result = await login(formData);
       if (result && !result.success) {
@@ -45,6 +51,11 @@ export default function LoginPage() {
         </div>
         <div className="card">
           <h2 className="text-xl font-semibold mb-6">Sign In</h2>
+          {passwordReset && (
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4 text-sm">
+              ✓ Password reset successful. Please sign in with your new password.
+            </div>
+          )}
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">
               {error}
@@ -58,6 +69,11 @@ export default function LoginPage() {
             <div className="form-group">
               <label className="form-label" htmlFor="password">Password</label>
               <PasswordInput id="password" name="password" placeholder="Enter your password" required autoComplete="current-password" />
+              <div className="text-right mt-1">
+                <Link href="/forgot-password" className="text-xs text-green-600 hover:text-green-700">
+                  Forgot password?
+                </Link>
+              </div>
             </div>
             <button type="submit" className="btn btn-primary w-full mt-2" disabled={loading}>
               {loading ? (
@@ -68,7 +84,8 @@ export default function LoginPage() {
               ) : "Sign In"}
             </button>
           </form>
-        </div>          <p className="text-center text-sm text-gray-500 mt-6">
+        </div>
+        <p className="text-center text-sm text-gray-500 mt-6">
           Contact your administrator for account access
         </p>
       </div>
