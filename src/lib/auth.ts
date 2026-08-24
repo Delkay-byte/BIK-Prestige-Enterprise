@@ -18,21 +18,28 @@ function getJwtSecret(): Uint8Array {
 // ---------------------------------------------------------------------------
 // Session security policy (server-enforced)
 // ---------------------------------------------------------------------------
+/** Safely parse a positive integer from env, falling back to default. */
+function safeInt(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 export const SESSION_POLICY = {
   /** 5 minutes — inactivity timeout */
-  INACTIVITY_TIMEOUT_SECONDS: parseInt(
-    process.env.SESSION_IDLE_TIMEOUT_SECONDS || "300",
-    10
+  INACTIVITY_TIMEOUT_SECONDS: safeInt(
+    process.env.SESSION_IDLE_TIMEOUT_SECONDS,
+    300
   ),
   /** 60 seconds — background/hidden-page grace */
-  BACKGROUND_TIMEOUT_SECONDS: parseInt(
-    process.env.SESSION_BACKGROUND_TIMEOUT_SECONDS || "60",
-    10
+  BACKGROUND_TIMEOUT_SECONDS: safeInt(
+    process.env.SESSION_BACKGROUND_TIMEOUT_SECONDS,
+    60
   ),
   /** 15 minutes — absolute session lifetime */
-  ABSOLUTE_TIMEOUT_SECONDS: parseInt(
-    process.env.SESSION_ABSOLUTE_TIMEOUT_SECONDS || "900",
-    10
+  ABSOLUTE_TIMEOUT_SECONDS: safeInt(
+    process.env.SESSION_ABSOLUTE_TIMEOUT_SECONDS,
+    900
   ),
   /** Warning shown 60 seconds before inactivity expiry */
   WARNING_BEFORE_SECONDS: 60,
@@ -107,6 +114,14 @@ export async function verifyPassword(
 export async function createToken(payload: JwtPayload): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const absoluteExpiry = now + SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS;
+  // jose setExpirationTime: strings like "15m" are durations-from-now;
+  // numbers are ALSO durations-from-now (not absolute timestamps).
+  // Convert seconds to a jose-compatible string to avoid misinterpretation.
+  const expirySeconds = SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS;
+  const expiryMinutes = Math.floor(expirySeconds / 60);
+  const expiryString = expiryMinutes >= 60
+    ? `${Math.floor(expiryMinutes / 60)}h${expiryMinutes % 60 > 0 ? `${expiryMinutes % 60}m` : ""}`
+    : `${expiryMinutes}m`;
   return new SignJWT({
     ...payload,
     iat: now,
@@ -115,7 +130,7 @@ export async function createToken(payload: JwtPayload): Promise<string> {
   } as unknown as Record<string, unknown>)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt(now)
-    .setExpirationTime(absoluteExpiry)
+    .setExpirationTime(expiryString)
     .sign(getJwtSecret());
 }
 
@@ -176,14 +191,20 @@ export function validateSessionTiming(payload: JwtPayload): SessionStatus {
 export async function refreshLastActivity(payload: JwtPayload): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const iat = payload.iat ?? now;
-  const exp = payload.exp ?? now + SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS;
+  // Use remaining seconds from the original exp, or fall back to full timeout
+  const remainingSeconds = payload.exp ? Math.max(0, payload.exp - now) : SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS;
+  const remainingMinutes = Math.max(1, Math.floor(remainingSeconds / 60));
+  const expiryString = remainingMinutes >= 60
+    ? `${Math.floor(remainingMinutes / 60)}h${remainingMinutes % 60 > 0 ? `${remainingMinutes % 60}m` : ""}`
+    : `${remainingMinutes}m`;
   return new SignJWT({
     ...payload,
     lastActivityAt: now,
+    exp: payload.exp ?? (now + SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS),
   } as unknown as Record<string, unknown>)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt(iat)
-    .setExpirationTime(exp)
+    .setExpirationTime(expiryString)
     .sign(getJwtSecret());
 }
 
@@ -193,13 +214,15 @@ export async function refreshLastActivity(payload: JwtPayload): Promise<string> 
 
 async function setSessionCookie(name: string, token: string) {
   const cookieStore = await cookies();
-  // maxAge matches the absolute timeout so the cookie is also cleaned by the browser
+  // maxAge must always be a valid positive integer (NaN would cause the browser
+  // to discard the cookie, creating an instant login loop).
+  const maxAge = Math.max(60, SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS + 60);
   cookieStore.set(name, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS + 60, // small buffer for clock skew
+    maxAge,
   });
 }
 

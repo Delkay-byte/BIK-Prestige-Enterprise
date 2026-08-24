@@ -52,6 +52,7 @@ export default function SessionMonitor() {
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isHiddenRef = useRef(false);
   const countdownReasonRef = useRef<string>("inactivity");
+  const warningActiveRef = useRef(false);
 
   // ── Activity refresh ──────────────────────────────────────────────────
 
@@ -152,17 +153,6 @@ export default function SessionMonitor() {
     // Poll server periodically
     pollTimerRef.current = setInterval(pollServer, SERVER_POLL_MS);
 
-    // Countdown timer for warnings
-    countdownTimerRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          void logTimeoutAndLogout(countdownReasonRef.current);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
     return () => {
       for (const evt of events) {
         document.removeEventListener(evt, handleActivity);
@@ -173,6 +163,40 @@ export default function SessionMonitor() {
       if (backgroundTimerRef.current) clearTimeout(backgroundTimerRef.current);
     };
   }, [handleActivity, handleVisibilityChange, pollServer]);
+
+  // ── Countdown timer (only active while a warning is displayed) ───────
+
+  useEffect(() => {
+    const isActive = showInactivityWarning || showAbsoluteWarning;
+    warningActiveRef.current = isActive;
+
+    if (isActive) {
+      // Start a fresh countdown tick every second while warning is shown
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            void logTimeoutAndLogout(countdownReasonRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      // No warning — stop any running countdown
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+      }
+    }
+
+    return () => {
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+      }
+    };
+  }, [showInactivityWarning, showAbsoluteWarning]);
 
   // ── Warning Dialogs ───────────────────────────────────────────────────
 

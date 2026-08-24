@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getAdminDashboardStats } from "@/lib/actions/daily-account.actions";
 import { getSusuDashboardStats } from "@/lib/actions/susu-dashboard.actions";
 import { formatCedi } from "@/lib/utils";
+import CediAmount from "@/components/CediAmount";
 import Link from "next/link";
 
 interface MoMoStats {
@@ -131,7 +132,7 @@ export default function AdminDashboardPage() {
                 <div className="text-xs text-gray-600">Paid Today</div>
               </div>
               <div className="bg-emerald-50 rounded-lg p-3 text-center">
-                <div className="text-xl font-bold">{formatCedi(susuStats.todayContributions)}</div>
+                <div className="text-xl font-bold"><CediAmount amount={susuStats.todayContributions} /></div>
                 <div className="text-xs text-gray-600">Contributions</div>
               </div>
               <div className="bg-yellow-50 rounded-lg p-3 text-center">
@@ -148,25 +149,25 @@ export default function AdminDashboardPage() {
         <div className="card">
           <div className="text-sm text-gray-500 mb-1">MoMo Cash Position</div>
           <div className="text-xl font-bold text-green-700">
-            {momoStats ? formatCedi(momoStats.totalCashPosition) : "—"}
+            {momoStats ? <CediAmount amount={momoStats.totalCashPosition} /> : "—"}
           </div>
         </div>
         <div className="card">
           <div className="text-sm text-gray-500 mb-1">Susu Today&apos;s Commission</div>
           <div className="text-xl font-bold text-purple-700">
-            {susuStats ? formatCedi(susuStats.todayCommission) : "—"}
+            {susuStats ? <CediAmount amount={susuStats.todayCommission} /> : "—"}
           </div>
         </div>
         <div className="card">
           <div className="text-sm text-gray-500 mb-1">Susu Card Fee Income</div>
           <div className="text-xl font-bold text-indigo-700">
-            {susuStats ? formatCedi(susuStats.totalCardFees) : "—"}
+            {susuStats ? <CediAmount amount={susuStats.totalCardFees} /> : "—"}
           </div>
         </div>
         <div className="card">
           <div className="text-sm text-gray-500 mb-1">Pending Remittances</div>
           <div className={`text-xl font-bold ${susuStats && susuStats.pendingRemittances > 0 ? "text-red-600" : "text-green-700"}`}>
-            {susuStats ? formatCedi(susuStats.pendingRemittances) : "—"}
+            {susuStats ? <CediAmount amount={susuStats.pendingRemittances} /> : "—"}
           </div>
         </div>
       </div>
@@ -215,8 +216,8 @@ export default function AdminDashboardPage() {
                       {row.difference !== null ? (
                         <span className={row.difference === 0 ? "text-green-600" : "text-red-600"}>
                           {row.difference === 0
-                            ? "GH₵0.00"
-                            : `${row.difference > 0 ? "+" : ""}${formatCedi(row.difference)}`}
+                            ? <CediAmount amount={0} />
+                            : <CediAmount amount={row.difference} showSign />}
                         </span>
                       ) : (
                         <span className="text-gray-400">&mdash;</span>

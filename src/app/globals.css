@@ -1,7 +1,20 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Noto Sans is placed after system fonts so visual appearance is unchanged,
+     but when the cedi glyph (U+20B5) is missing from Roboto/system fonts
+     the browser falls back to Noto Sans which contains it. */
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+}
+
+/*
+ * Ghana cedi symbol (U+20B5) is missing from Roboto and many system fonts
+ * on Android.  Noto Sans includes it reliably.  Apply Noto Sans to all
+ * elements that may contain the cedi character.
+ */
+.cedi, .font-cedi {
+  font-family: "Noto Sans", system-ui, -apple-system, sans-serif;
 }
 
 input[type="text"],

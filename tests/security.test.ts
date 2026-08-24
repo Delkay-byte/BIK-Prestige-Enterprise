@@ -131,6 +131,60 @@ describe("Session timing", () => {
     expect(SESSION_POLICY.BACKGROUND_TIMEOUT_SECONDS).toBe(60);
     expect(SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS).toBe(900);
   });
+
+  it("freshly created session is immediately valid (no login loop)", async () => {
+    // Simulate the exact flow: createToken → verifyToken → validateSessionTiming
+    const before = Math.floor(Date.now() / 1000);
+    const token = await createToken({
+      userId: "test-user",
+      email: "test@test.com",
+      role: "admin",
+    });
+    const after = Math.floor(Date.now() / 1000);
+
+    const payload = await verifyToken<JwtPayload>(token);
+    expect(payload).not.toBeNull();
+
+    // iat and lastActivityAt must be set by createToken
+    expect(payload!.iat).toBeGreaterThanOrEqual(before);
+    expect(payload!.iat).toBeLessThanOrEqual(after);
+    expect(payload!.lastActivityAt).toBeGreaterThanOrEqual(before);
+    expect(payload!.lastActivityAt).toBeLessThanOrEqual(after);
+
+    // exp must be set far in the future (absolute timeout)
+    expect(payload!.exp).toBeGreaterThanOrEqual(before + SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS);
+    expect(payload!.exp).toBeLessThanOrEqual(after + SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS);
+
+    // Session must be valid immediately after creation
+    const status = validateSessionTiming(payload!);
+    expect(status).toBe("valid");
+  });
+
+  it("session remains valid for full inactivity period", async () => {
+    const token = await createToken({
+      userId: "test-user",
+      email: "test@test.com",
+      role: "admin",
+    });
+
+    const payload = await verifyToken<JwtPayload>(token);
+    expect(payload).not.toBeNull();
+
+    // Simulate 299 seconds of inactivity (just under the 300s limit)
+    const now = Math.floor(Date.now() / 1000);
+    const nearlyExpired: JwtPayload = {
+      ...payload!,
+      lastActivityAt: now - 299,
+    };
+    expect(validateSessionTiming(nearlyExpired)).toBe("valid");
+
+    // Simulate 301 seconds of inactivity (just over the limit)
+    const expired: JwtPayload = {
+      ...payload!,
+      lastActivityAt: now - 301,
+    };
+    expect(validateSessionTiming(expired)).toBe("inactivity_expired");
+  });
 });
 
 // ============================================================
