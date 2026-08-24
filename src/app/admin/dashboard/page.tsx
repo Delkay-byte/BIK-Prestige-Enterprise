@@ -4,7 +4,7 @@ import { isRedirectError } from "@/lib/errors";
 import { useEffect, useState } from "react";
 import { getAdminDashboardStats } from "@/lib/actions/daily-account.actions";
 import { getSusuDashboardStats } from "@/lib/actions/susu-dashboard.actions";
-import { formatCedi } from "@/lib/utils";
+import { formatCedi, getGreeting, getDailyQuote } from "@/lib/utils";
 import CediAmount from "@/components/CediAmount";
 import Link from "next/link";
 
@@ -43,6 +43,7 @@ export default function AdminDashboardPage() {
   const [susuStats, setSusuStats] = useState<SusuStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [quote] = useState(() => getDailyQuote("admin"));
 
   async function loadStats() {
     try {
@@ -77,8 +78,9 @@ export default function AdminDashboardPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Platform Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{getGreeting()}, Admin 👋</h1>
         <p className="text-gray-500 mt-1">BIK Prestige Enterprise — Overview of all modules</p>
+        <p className="text-sm text-green-600 italic mt-1">&ldquo;{quote}&rdquo;</p>
       </div>
 
       {/* Module Overview Cards */}

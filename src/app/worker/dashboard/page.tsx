@@ -4,7 +4,7 @@ import { isRedirectError } from "@/lib/errors";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getWorkerDailyAccounts, createDailyAccount } from "@/lib/actions/daily-account.actions";
-import { formatDate, getGreeting, getTodayString } from "@/lib/utils";
+import { formatDate, getGreeting, getTodayString, getDailyQuote } from "@/lib/utils";
 import Link from "next/link";
 
 interface DailyAccount {
@@ -25,6 +25,7 @@ export default function WorkerDashboardPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [locationId, setLocationId] = useState("");
+  const [quote] = useState(() => getDailyQuote("momo"));
 
   async function loadData() {
     try {
@@ -71,8 +72,9 @@ export default function WorkerDashboardPage() {
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-        <h1 className="text-2xl font-bold text-gray-900">{getGreeting()}! 👋</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{getGreeting()}, {userName || "Worker"}! 👋</h1>
         {locationName && <p className="text-gray-500 mt-1">Location: <span className="font-medium text-gray-700">{locationName}</span></p>}
+        <p className="text-sm text-green-600 italic mt-1">&ldquo;{quote}&rdquo;</p>
       </div>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}

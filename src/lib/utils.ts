@@ -55,12 +55,57 @@ export function getTodayString(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-// Get greeting based on time of day
+// Get greeting based on time of day (uses Ghana/business timezone)
 export function getGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";
   return "Good evening";
+}
+
+// ── Business quotes ───────────────────────────────────────────────────────
+const QUOTES: Record<string, string[]> = {
+  momo: [
+    "Accuracy builds trust.",
+    "Every record tells part of the business story.",
+    "Good service brings customers back.",
+    "Small steps every day build great results.",
+    "A well-kept account protects the business.",
+    "Discipline with numbers leads to growth.",
+    "Every transaction is a step forward.",
+  ],
+  susu: [
+    "Trust is built one transaction at a time.",
+    "Savings today, security tomorrow.",
+    "Consistency is the key to strong savings.",
+    "Every collection strengthens the community.",
+    "Good relationships bring good business.",
+    "Small savings grow into big results.",
+    "Reliability builds lasting partnerships.",
+  ],
+  admin: [
+    "Good leadership starts with accurate records.",
+    "Accountability drives the business forward.",
+    "Every detail matters when you manage people's trust.",
+    "Growth follows good governance.",
+    "A clear view of the numbers makes better decisions.",
+    "Strong teams build strong businesses.",
+    "Transparency is the foundation of trust.",
+  ],
+};
+
+/**
+ * Select a daily quote. Uses the day-of-year as a stable seed so the same
+ * quote shows all day (no hydration mismatch). Different modules get
+ * different quote pools.
+ */
+export function getDailyQuote(module: "momo" | "susu" | "admin" = "momo"): string {
+  const pool = QUOTES[module] || QUOTES.momo;
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const diff = now.getTime() - start.getTime();
+  const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
+  return pool[dayOfYear % pool.length];
 }
 
 // Status badge color classes

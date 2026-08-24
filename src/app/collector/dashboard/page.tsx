@@ -1,10 +1,10 @@
 "use client";
 import { isRedirectError } from "@/lib/errors";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { getCollectorDashboardStats } from "@/lib/actions/susu-dashboard.actions";
 import { recordContribution } from "@/lib/actions/susu-contribution.actions";
-import { formatCedi } from "@/lib/utils";
+import { formatCedi, getGreeting, getDailyQuote } from "@/lib/utils";
 
 interface ToVisitCustomer {
   accountId: string;
@@ -52,11 +52,19 @@ function formatTime(isoString: string): string {
   return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
+type SortOption = "name" | "amount" | "days";
+
 export default function CollectorDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [quote] = useState(() => getDailyQuote("susu"));
+
+  // UI state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "visit" | "collected">("all");
+  const [sortBy, setSortBy] = useState<SortOption>("amount");
 
   // Collection recording state
   const [recordingFor, setRecordingFor] = useState<ToVisitCustomer | null>(null);
@@ -65,118 +73,110 @@ export default function CollectorDashboardPage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   async function loadData() {
     try {
       const authRes = await fetch("/api/auth/me");
       const authUser = authRes.ok ? await authRes.json() : null;
-
       if (authUser?.userId) {
         const userRes = await fetch(`/api/user/${authUser.userId}`);
         const fullUser = userRes.ok ? await userRes.json() : null;
         setUser({ userId: authUser.userId, fullName: fullUser?.fullName || "" });
-
         const dashboardData = await getCollectorDashboardStats(authUser.userId);
         setData(dashboardData as DashboardData | null);
       }
     } catch (err) { if (isRedirectError(err)) throw err;
       setError("Failed to load dashboard");
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
   async function handleRecordCollection() {
     if (!recordingFor || !collectAmount) return;
-
-    setSubmitting(true);
-    setError("");
-    setSuccess("");
-
+    setSubmitting(true); setError(""); setSuccess("");
     try {
       const amountNum = parseFloat(collectAmount);
-      if (!amountNum || amountNum <= 0) {
-        setError("Enter a valid amount");
-        return;
-      }
-
+      if (!amountNum || amountNum <= 0) { setError("Enter a valid amount"); return; }
       const result = await recordContribution({
-        accountId: recordingFor.accountId,
-        amount: amountNum,
-        channel: "collector",
+        accountId: recordingFor.accountId, amount: amountNum, channel: "collector",
         notes: collectNotes || undefined,
       });
-
       if (result.success) {
-        const resultData = result.data as { daysAllocated: number; allocatedAmount: number };
-        setSuccess(
-          `${recordingFor.customerName}: ${formatCedi(amountNum)} collected — ${resultData.daysAllocated} day(s) covered`
-        );
-        setRecordingFor(null);
-        setCollectAmount("");
-        setCollectNotes("");
-        // Refresh data to move customer from TO VISIT → COLLECTED TODAY
+        const resultData = result.data as { daysAllocated: number };
+        setSuccess(`${recordingFor.customerName}: ${formatCedi(amountNum)} — ${resultData.daysAllocated} day(s) covered`);
+        setRecordingFor(null); setCollectAmount(""); setCollectNotes("");
         loadData();
       } else {
-        setError(result.error || "Unable to record this collection. Please try again.");
+        setError(result.error || "Unable to record. Please try again.");
       }
     } catch (err) { if (isRedirectError(err)) throw err;
-      setError("We couldn't confirm whether this collection was recorded. Please check the customer's history before trying again.");
-    } finally {
-      setSubmitting(false);
-    }
+      setError("We couldn't confirm this collection. Please check the customer's history.");
+    } finally { setSubmitting(false); }
   }
 
-  if (loading)
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="spinner"></div>
-      </div>
-    );
+  // Filtered + sorted data
+  const filteredToVisit = useMemo(() => {
+    if (!data) return [];
+    let list = data.toVisit;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(c =>
+        c.customerName.toLowerCase().includes(q) ||
+        c.customerIdCode.toLowerCase().includes(q)
+      );
+    }
+    if (sortBy === "name") list = [...list].sort((a, b) => a.customerName.localeCompare(b.customerName));
+    else if (sortBy === "amount") list = [...list].sort((a, b) => b.expectedAmount - a.expectedAmount);
+    else if (sortBy === "days") list = [...list].sort((a, b) => b.outstandingDays - a.outstandingDays);
+    return list;
+  }, [data, searchQuery, sortBy]);
 
-  if (error && !data)
-    return (
-      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">{error}</div>
-    );
+  const filteredCollected = useMemo(() => {
+    if (!data) return [];
+    let list = data.collectedToday;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(c =>
+        c.customerName.toLowerCase().includes(q) ||
+        c.customerIdCode.toLowerCase().includes(q)
+      );
+    }
+    return [...list].sort((a, b) => new Date(b.collectedAt).getTime() - new Date(a.collectedAt).getTime());
+  }, [data, searchQuery]);
+
+  if (loading) return <div className="flex items-center justify-center py-20"><div className="spinner"></div></div>;
+  if (error && !data) return <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">{error}</div>;
 
   const totalAssigned = data?.assignedCustomers || 0;
   const collected = data?.collectedToday.length || 0;
   const remaining = data?.toVisit.length || 0;
   const allDone = remaining === 0 && totalAssigned > 0;
 
+  const showVisit = filter === "all" || filter === "visit";
+  const showCollected = filter === "all" || filter === "collected";
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+    <div className="space-y-5">
+      {/* Header with greeting */}
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
         <h1 className="text-2xl font-bold text-gray-900">
-          {user?.fullName || "Collector"} 👋
+          {getGreeting()}, {user?.fullName || "Collector"} 👋
         </h1>
-        <p className="text-gray-500 mt-1">Collector Dashboard</p>
+        <p className="text-sm text-green-600 italic mt-1">&ldquo;{quote}&rdquo;</p>
       </div>
 
-      {/* Success / Error messages */}
-      {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
-          ✓ {success}
-        </div>
-      )}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-          {error}
-        </div>
-      )}
+      {/* Messages */}
+      {success && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">✓ {success}</div>}
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
 
-      {/* Today's Progress */}
+      {/* Progress */}
       {data && (
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
           <h2 className="text-lg font-semibold mb-3">Today&apos;s Collections</h2>
           {allDone ? (
             <div className="text-center py-2">
               <p className="text-2xl mb-1">✅</p>
-              <p className="font-semibold text-green-700">All collections completed for today</p>
+              <p className="font-semibold text-green-700">All collections completed!</p>
               <p className="text-sm text-gray-500 mt-1">{totalAssigned} of {totalAssigned} customers collected</p>
             </div>
           ) : (
@@ -200,40 +200,72 @@ export default function CollectorDashboardPage() {
         </div>
       )}
 
-      {/* TO VISIT */}
-      {data && remaining > 0 && (
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h2 className="text-lg font-semibold mb-1">To Visit</h2>
-          <p className="text-sm text-gray-500 mb-4">{remaining} customer{remaining !== 1 ? "s" : ""} remaining</p>
-          <div className="space-y-3">
-            {data.toVisit.map((customer) => (
-              <div
-                key={customer.accountId}
-                className="p-4 rounded-lg border border-gray-200 hover:border-green-300 transition-colors"
+      {/* Search + Filters + Sort */}
+      {data && (
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Search */}
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="Search customers..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-400"
+              />
+            </div>
+            {/* Filters */}
+            <div className="flex gap-1">
+              {(["all", "visit", "collected"] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                    filter === f
+                      ? "bg-green-100 text-green-700"
+                      : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                  }`}
+                >
+                  {f === "all" ? "All" : f === "visit" ? "To Visit" : "Collected"}
+                </button>
+              ))}
+            </div>
+            {/* Sort */}
+            {showVisit && remaining > 0 && (
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortOption)}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-600"
               >
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <div className="font-medium">{customer.customerName}</div>
-                    <div className="text-xs text-gray-500">{customer.customerIdCode}</div>
+                <option value="amount">Sort: Amount</option>
+                <option value="days">Sort: Days Due</option>
+                <option value="name">Sort: Name</option>
+              </select>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TO VISIT — Grid */}
+      {data && showVisit && filteredToVisit.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-1 px-1">To Visit</h2>
+          <p className="text-sm text-gray-500 mb-3 px-1">{filteredToVisit.length} customer{filteredToVisit.length !== 1 ? "s" : ""} remaining</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {filteredToVisit.map((customer) => (
+              <div key={customer.accountId} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:border-green-300 transition-colors flex flex-col">
+                <div className="flex-1">
+                  <div className="font-medium text-sm truncate" title={customer.customerName}>{customer.customerName}</div>
+                  <div className="text-xs text-gray-400 mb-2">{customer.customerIdCode}</div>
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>Daily: {formatCedi(customer.dailyContribution)}</span>
+                    <span>{customer.outstandingDays}d due</span>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm text-gray-500">
-                      {customer.outstandingDays} day{customer.outstandingDays !== 1 ? "s" : ""} due
-                    </div>
-                    <div className="font-semibold text-green-700">
-                      Expected: {formatCedi(customer.expectedAmount)}
-                    </div>
-                  </div>
-                </div>
-                <div className="text-xs text-gray-400 mb-3">
-                  Daily: {formatCedi(customer.dailyContribution)}/day
+                  <div className="font-semibold text-sm text-green-700">{formatCedi(customer.expectedAmount)}</div>
                 </div>
                 <button
-                  onClick={() => {
-                    setRecordingFor(customer);
-                    setCollectAmount(String(customer.expectedAmount));
-                  }}
-                  className="btn btn-primary btn-sm w-full"
+                  onClick={() => { setRecordingFor(customer); setCollectAmount(String(customer.expectedAmount)); }}
+                  className="btn btn-primary btn-sm w-full mt-3"
                 >
                   💵 Collect
                 </button>
@@ -243,38 +275,38 @@ export default function CollectorDashboardPage() {
         </div>
       )}
 
+      {/* Empty search */}
+      {data && showVisit && searchQuery && filteredToVisit.length === 0 && remaining > 0 && (
+        <div className="text-center py-6 text-gray-500">
+          <p className="text-sm">No customers matching &ldquo;{searchQuery}&rdquo;</p>
+        </div>
+      )}
+
       {/* All caught up */}
       {data && allDone && (
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-center">
           <p className="text-3xl mb-2">🎉</p>
           <p className="font-medium text-gray-700">All collections completed for today!</p>
-          <p className="text-sm text-gray-500 mt-1">{totalAssigned} of {totalAssigned} customers collected</p>
+          <p className="text-sm text-gray-500 mt-1">{totalAssigned} of {totalAssigned} collected</p>
         </div>
       )}
 
-      {/* COLLECTED TODAY */}
-      {data && collected > 0 && (
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h2 className="text-lg font-semibold mb-1">Collected Today</h2>
-          <p className="text-sm text-gray-500 mb-4">{collected} customer{collected !== 1 ? "s" : ""} collected</p>
-          <div className="space-y-2">
-            {data.collectedToday.map((customer) => (
-              <div
-                key={customer.accountId}
-                className="flex items-center justify-between p-3 rounded-lg bg-green-50 border border-green-100"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-green-600 text-lg">✓</span>
-                  <div>
-                    <div className="font-medium text-sm">{customer.customerName}</div>
-                    <div className="text-xs text-gray-500">{customer.customerIdCode}</div>
-                  </div>
+      {/* COLLECTED TODAY — Grid */}
+      {data && showCollected && filteredCollected.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-1 px-1">Collected Today</h2>
+          <p className="text-sm text-gray-500 mb-3 px-1">{filteredCollected.length} customer{filteredCollected.length !== 1 ? "s" : ""} collected</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {filteredCollected.map((customer) => (
+              <div key={customer.accountId} className="bg-green-50 rounded-xl p-4 border border-green-100">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-green-600">✓</span>
+                  <span className="font-medium text-sm truncate" title={customer.customerName}>{customer.customerName}</span>
                 </div>
-                <div className="text-right">
-                  <div className="font-semibold text-sm text-green-700">{formatCedi(customer.amountCollected)}</div>
-                  <div className="text-xs text-gray-500">
-                    {customer.daysCovered} day{customer.daysCovered !== 1 ? "s" : ""} covered · {formatTime(customer.collectedAt)}
-                  </div>
+                <div className="text-xs text-gray-400 mb-2">{customer.customerIdCode}</div>
+                <div className="font-semibold text-sm text-green-700">{formatCedi(customer.amountCollected)}</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {customer.daysCovered} day{customer.daysCovered !== 1 ? "s" : ""} covered · {formatTime(customer.collectedAt)}
                 </div>
               </div>
             ))}
@@ -284,7 +316,7 @@ export default function CollectorDashboardPage() {
 
       {/* Recent Money Handed In */}
       {data && data.recentRemittances.length > 0 && (
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
           <h2 className="text-lg font-semibold mb-4">Recent Money Handed In</h2>
           <div className="space-y-2">
             {data.recentRemittances.map((r) => (
@@ -297,11 +329,7 @@ export default function CollectorDashboardPage() {
                     </span>
                   )}
                 </div>
-                <span
-                  className={`badge ${
-                    r.status === "reconciled" ? "badge-green" : "badge-red"
-                  }`}
-                >
+                <span className={`badge ${r.status === "reconciled" ? "badge-green" : "badge-red"}`}>
                   {r.status === "reconciled" ? "Matches" : "Short"}
                 </span>
               </div>
@@ -310,7 +338,7 @@ export default function CollectorDashboardPage() {
         </div>
       )}
 
-      {/* Collection Recording Modal */}
+      {/* Recording Modal */}
       {recordingFor && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
           <div className="bg-white rounded-t-2xl md:rounded-xl p-6 w-full max-w-md">
@@ -318,48 +346,26 @@ export default function CollectorDashboardPage() {
             <div className="bg-green-50 rounded-lg p-3 mb-4">
               <div className="font-medium">{recordingFor.customerName}</div>
               <div className="text-sm text-gray-600">
-                {recordingFor.outstandingDays} day{recordingFor.outstandingDays !== 1 ? "s" : ""} due &bull;{" "}
-                Expected: {formatCedi(recordingFor.expectedAmount)}
+                {recordingFor.outstandingDays} day{recordingFor.outstandingDays !== 1 ? "s" : ""} due · Expected: {formatCedi(recordingFor.expectedAmount)}
               </div>
             </div>
             <div className="form-group">
               <label className="form-label">Amount Received (GH₵)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={collectAmount}
-                onChange={(e) => setCollectAmount(e.target.value)}
-                className="text-lg"
-              />
+              <input type="number" step="0.01" min="0.01" value={collectAmount}
+                onChange={(e) => setCollectAmount(e.target.value)} className="text-lg" />
               <p className="form-hint">
                 Will cover ~{Math.floor(parseFloat(collectAmount || "0") / recordingFor.dailyContribution)} day(s)
               </p>
             </div>
             <div className="form-group">
               <label className="form-label">Note (optional)</label>
-              <input
-                type="text"
-                value={collectNotes}
-                onChange={(e) => setCollectNotes(e.target.value)}
-                placeholder="Any note..."
-              />
+              <input type="text" value={collectNotes} onChange={(e) => setCollectNotes(e.target.value)} placeholder="Any note..." />
             </div>
             <div className="flex gap-3 mt-4">
-              <button
-                onClick={handleRecordCollection}
-                className="btn btn-primary flex-1"
-                disabled={submitting}
-              >
+              <button onClick={handleRecordCollection} className="btn btn-primary flex-1" disabled={submitting}>
                 {submitting ? "Recording..." : "✅ Record"}
               </button>
-              <button
-                onClick={() => {
-                  setRecordingFor(null);
-                  setCollectAmount("");
-                }}
-                className="btn btn-secondary flex-1"
-              >
+              <button onClick={() => { setRecordingFor(null); setCollectAmount(""); }} className="btn btn-secondary flex-1">
                 Cancel
               </button>
             </div>
