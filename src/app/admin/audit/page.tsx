@@ -16,6 +16,32 @@ interface AuditEntry {
   createdAt: Date;
 }
 
+/** Map raw action codes to friendly, human-readable labels. */
+function friendlyAction(action: string): string {
+  const map: Record<string, string> = {
+    "auth.login": "Signed in",
+    "auth.logout": "Signed out",
+    "auth.password_changed": "Changed password",
+    "auth.first_login_password_changed": "Changed password (first login)",
+    "auth.reauth_success": "Confirmed identity",
+    "auth.reauth_failed": "Failed identity confirmation",
+    "auth.workspace_selected": "Selected work area",
+    "auth.workspace_switched": "Switched work area",
+    "user.password_reset": "Reset a user's password",
+    "user.module_assignment_changed": "Changed user's work access",
+    "susu.contribution_recorded": "Recorded customer payment",
+    "susu.collector_created": "Added a new collector",
+    "susu.collector_activated": "Activated a collector",
+    "susu.collector_deactivated": "Deactivated a collector",
+    "susu.customer_assigned_to_collector": "Assigned customer to collector",
+    "susu.customer_removed_from_collector": "Removed customer from collector",
+    "susu.remittance_recorded": "Recorded collector money handed in",
+    "daily_account.submitted": "Submitted today's MoMo account",
+    "daily_account.reviewed": "Reviewed today's MoMo account",
+  };
+  return map[action] || action.replace(/_/g, " ").replace(/\./g, " — ");
+}
+
 export default function AuditLogPage() {
   const [logs, setLogs] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,8 +74,8 @@ export default function AuditLogPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
-        <p className="text-gray-500 mt-1">System activity and security audit trail</p>
+        <h1 className="text-2xl font-bold text-gray-900">Activity History</h1>
+        <p className="text-gray-500 mt-1">A record of important actions performed in the system</p>
       </div>
 
       <div className="card">
@@ -79,7 +105,7 @@ export default function AuditLogPage() {
                     <tr key={log.id}>
                       <td className="text-sm whitespace-nowrap">{formatDateTime(log.createdAt)}</td>
                       <td>
-                        <span className="badge badge-blue text-xs">{log.action}</span>
+                        <span className="badge badge-blue text-xs">{friendlyAction(log.action)}</span>
                       </td>
                       <td className="text-sm">
                         <span className="font-medium">{log.entityType}</span>

@@ -77,7 +77,7 @@ export async function getSusuDashboardStats() {
 }
 
 /**
- * Get collector-specific dashboard stats.
+ * Get collector-specific dashboard stats with TO VISIT and COLLECTED TODAY.
  * Only accessible by users with the collector role.
  */
 export async function getCollectorDashboardStats(collectorUserId: string) {
@@ -99,6 +99,7 @@ export async function getCollectorDashboardStats(collectorUserId: string) {
 
   if (!collector) return null;
 
+  // Use start-of-day in UTC (consistent with the rest of the app)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
@@ -115,52 +116,104 @@ export async function getCollectorDashboardStats(collectorUserId: string) {
     },
   });
 
-  const [todayCollections, recentRemittances] = await Promise.all([
-    db.contribution.aggregate({
-      where: {
-        collectorId: collector.id,
-        collectionDate: { gte: today, lt: tomorrow },
-      },
-      _sum: { amount: true },
-      _count: true,
-    }),
-    db.collectorRemittance.findMany({
-      where: { collectorId: collector.id },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-    }),
-  ]);
+  // Fetch today's contributions for this collector (any channel — including office)
+  const todayContributions = await db.contribution.findMany({
+    where: {
+      collectionDate: { gte: today, lt: tomorrow },
+    },
+    include: {
+      allocations: true,
+    },
+    orderBy: { collectionDate: "desc" },
+  });
 
-  // Calculate outstanding obligations per customer
-  const outstandingObligations = [];
+  // Index today's contributions by accountId for quick lookup
+  const todayByAccount = new Map<string, typeof todayContributions>();
+  for (const c of todayContributions) {
+    const existing = todayByAccount.get(c.accountId) || [];
+    existing.push(c);
+    todayByAccount.set(c.accountId, existing);
+  }
+
+  const toVisit: Array<{
+    accountId: string;
+    customerName: string;
+    customerIdCode: string;
+    dailyContribution: number;
+    outstandingDays: number;
+    expectedAmount: number;
+  }> = [];
+
+  const collectedToday: Array<{
+    accountId: string;
+    customerName: string;
+    customerIdCode: string;
+    amountCollected: number;
+    daysCovered: number;
+    collectedAt: string;
+  }> = [];
+
+  let totalCollectedToday = 0;
+
   for (const assignment of assignments) {
     const cycle = assignment.account.cycles[0];
     if (!cycle) continue;
 
-    const allocations = await db.contributionAllocation.findMany({
-      where: { contribution: { cycleId: cycle.id } },
-    });
-    const paidDays = new Set(allocations.map((a) => a.cycleDay));
-    const outstandingDays: number[] = [];
-    for (let d = 1; d <= 31; d++) {
-      if (!paidDays.has(d)) outstandingDays.push(d);
-    }
+    // Check if this customer has been collected today (any channel)
+    const todayContribs = todayByAccount.get(assignment.account.id);
+    if (todayContribs && todayContribs.length > 0) {
+      // Customer has been collected today — show in COLLECTED TODAY
+      const latestContrib = todayContribs[0];
+      const daysCovered = latestContrib.allocations.length;
+      const amountCollected = todayContribs.reduce((sum, c) => sum + Number(c.amount), 0);
+      totalCollectedToday += amountCollected;
 
-    outstandingObligations.push({
-      accountId: assignment.account.id, // Correct: this is the SusuAccount ID, used for recording contributions
-      customerName: assignment.customer.fullName,
-      customerIdCode: assignment.customer.customerId,
-      dailyContribution: Number(cycle.dailyContribution),
-      outstandingDays: outstandingDays.length,
-      expectedAmount: outstandingDays.length * Number(cycle.dailyContribution),
-    });
+      collectedToday.push({
+        accountId: assignment.account.id,
+        customerName: assignment.customer.fullName,
+        customerIdCode: assignment.customer.customerId,
+        amountCollected,
+        daysCovered,
+        collectedAt: latestContrib.collectionDate.toISOString(),
+      });
+    } else {
+      // Customer has NOT been collected today — show in TO VISIT
+      const allocations = await db.contributionAllocation.findMany({
+        where: { contribution: { cycleId: cycle.id } },
+      });
+      const paidDays = new Set(allocations.map((a) => a.cycleDay));
+      const outstandingDays: number[] = [];
+      for (let d = 1; d <= 31; d++) {
+        if (!paidDays.has(d)) outstandingDays.push(d);
+      }
+
+      // Only include customers who actually have outstanding days
+      if (outstandingDays.length > 0) {
+        toVisit.push({
+          accountId: assignment.account.id,
+          customerName: assignment.customer.fullName,
+          customerIdCode: assignment.customer.customerId,
+          dailyContribution: Number(cycle.dailyContribution),
+          outstandingDays: outstandingDays.length,
+          expectedAmount: outstandingDays.length * Number(cycle.dailyContribution),
+        });
+      }
+    }
   }
+
+  // Fetch recent money handed in
+  const recentRemittances = await db.collectorRemittance.findMany({
+    where: { collectorId: collector.id },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+  });
 
   return {
     assignedCustomers: assignments.length,
-    todayCollected: Number(todayCollections._sum.amount || 0),
-    todayCollectionCount: todayCollections._count,
-    outstandingObligations,
+    todayCollected: totalCollectedToday,
+    todayCollectionCount: collectedToday.length,
+    toVisit,
+    collectedToday,
     recentRemittances: recentRemittances.map((r) => ({
       id: r.id,
       expectedAmount: Number(r.expectedAmount),

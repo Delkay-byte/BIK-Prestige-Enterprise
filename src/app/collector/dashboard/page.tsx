@@ -6,13 +6,22 @@ import { getCollectorDashboardStats } from "@/lib/actions/susu-dashboard.actions
 import { recordContribution } from "@/lib/actions/susu-contribution.actions";
 import { formatCedi } from "@/lib/utils";
 
-interface OutstandingCustomer {
+interface ToVisitCustomer {
   accountId: string;
   customerName: string;
   customerIdCode: string;
   dailyContribution: number;
   outstandingDays: number;
   expectedAmount: number;
+}
+
+interface CollectedCustomer {
+  accountId: string;
+  customerName: string;
+  customerIdCode: string;
+  amountCollected: number;
+  daysCovered: number;
+  collectedAt: string;
 }
 
 interface RemittanceEntry {
@@ -28,13 +37,19 @@ interface DashboardData {
   assignedCustomers: number;
   todayCollected: number;
   todayCollectionCount: number;
-  outstandingObligations: (OutstandingCustomer | null)[];
+  toVisit: ToVisitCustomer[];
+  collectedToday: CollectedCustomer[];
   recentRemittances: RemittanceEntry[];
 }
 
 interface UserInfo {
   userId: string;
   fullName: string;
+}
+
+function formatTime(isoString: string): string {
+  const d = new Date(isoString);
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function CollectorDashboardPage() {
@@ -44,7 +59,7 @@ export default function CollectorDashboardPage() {
   const [error, setError] = useState("");
 
   // Collection recording state
-  const [recordingFor, setRecordingFor] = useState<OutstandingCustomer | null>(null);
+  const [recordingFor, setRecordingFor] = useState<ToVisitCustomer | null>(null);
   const [collectAmount, setCollectAmount] = useState("");
   const [collectNotes, setCollectNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -56,7 +71,6 @@ export default function CollectorDashboardPage() {
 
   async function loadData() {
     try {
-      // Get user info
       const authRes = await fetch("/api/auth/me");
       const authUser = authRes.ok ? await authRes.json() : null;
 
@@ -90,24 +104,27 @@ export default function CollectorDashboardPage() {
       }
 
       const result = await recordContribution({
-        accountId: recordingFor.accountId, // Correct: uses the SusuAccount ID
+        accountId: recordingFor.accountId,
         amount: amountNum,
         channel: "collector",
         notes: collectNotes || undefined,
       });
 
       if (result.success) {
-        const resultData = result.data as { daysAllocated: number };
-        setSuccess(`Recorded: GH₵${amountNum.toFixed(2)} — ${resultData.daysAllocated} day(s) covered`);
+        const resultData = result.data as { daysAllocated: number; allocatedAmount: number };
+        setSuccess(
+          `${recordingFor.customerName}: ${formatCedi(amountNum)} collected — ${resultData.daysAllocated} day(s) covered`
+        );
         setRecordingFor(null);
         setCollectAmount("");
         setCollectNotes("");
+        // Refresh data to move customer from TO VISIT → COLLECTED TODAY
         loadData();
       } else {
-        setError(result.error || "Failed to record");
+        setError(result.error || "Unable to record this collection. Please try again.");
       }
     } catch (err) { if (isRedirectError(err)) throw err;
-      setError("An unexpected error occurred");
+      setError("We couldn't confirm whether this collection was recorded. Please check the customer's history before trying again.");
     } finally {
       setSubmitting(false);
     }
@@ -125,6 +142,11 @@ export default function CollectorDashboardPage() {
       <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">{error}</div>
     );
 
+  const totalAssigned = data?.assignedCustomers || 0;
+  const collected = data?.collectedToday.length || 0;
+  const remaining = data?.toVisit.length || 0;
+  const allDone = remaining === 0 && totalAssigned > 0;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -135,9 +157,10 @@ export default function CollectorDashboardPage() {
         <p className="text-gray-500 mt-1">Collector Dashboard</p>
       </div>
 
+      {/* Success / Error messages */}
       {success && (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
-          {success}
+          ✓ {success}
         </div>
       )}
       {error && (
@@ -146,57 +169,73 @@ export default function CollectorDashboardPage() {
         </div>
       )}
 
-      {/* Today's Summary */}
+      {/* Today's Progress */}
       {data && (
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
-            <div className="text-2xl font-bold text-green-700">
-              {formatCedi(data.todayCollected)}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <h2 className="text-lg font-semibold mb-3">Today&apos;s Collections</h2>
+          {allDone ? (
+            <div className="text-center py-2">
+              <p className="text-2xl mb-1">✅</p>
+              <p className="font-semibold text-green-700">All collections completed for today</p>
+              <p className="text-sm text-gray-500 mt-1">{totalAssigned} of {totalAssigned} customers collected</p>
             </div>
-            <div className="text-xs text-gray-500 mt-1">Collected Today</div>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
-            <div className="text-2xl font-bold text-blue-700">{data.assignedCustomers}</div>
-            <div className="text-xs text-gray-500 mt-1">Assigned Customers</div>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="text-center flex-1">
+                <div className="text-2xl font-bold text-green-700">{collected}</div>
+                <div className="text-xs text-gray-500">Collected</div>
+              </div>
+              <div className="text-gray-300 text-xl">·</div>
+              <div className="text-center flex-1">
+                <div className="text-2xl font-bold text-orange-600">{remaining}</div>
+                <div className="text-xs text-gray-500">Remaining</div>
+              </div>
+              <div className="text-gray-300 text-xl">·</div>
+              <div className="text-center flex-1">
+                <div className="text-2xl font-bold text-gray-700">{formatCedi(data.todayCollected)}</div>
+                <div className="text-xs text-gray-500">Collected Today</div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Today's Route - Outstanding Customers */}
-      {data && data.outstandingObligations.filter(Boolean).length > 0 && (
+      {/* TO VISIT */}
+      {data && remaining > 0 && (
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h2 className="text-lg font-semibold mb-4">Today&apos;s Route</h2>
+          <h2 className="text-lg font-semibold mb-1">To Visit</h2>
+          <p className="text-sm text-gray-500 mb-4">{remaining} customer{remaining !== 1 ? "s" : ""} remaining</p>
           <div className="space-y-3">
-            {data.outstandingObligations.filter(Boolean).map((customer) => (
+            {data.toVisit.map((customer) => (
               <div
-                key={customer!.accountId}
+                key={customer.accountId}
                 className="p-4 rounded-lg border border-gray-200 hover:border-green-300 transition-colors"
               >
                 <div className="flex items-center justify-between mb-2">
                   <div>
-                    <div className="font-medium">{customer!.customerName}</div>
-                    <div className="text-xs text-gray-500">{customer!.customerIdCode}</div>
+                    <div className="font-medium">{customer.customerName}</div>
+                    <div className="text-xs text-gray-500">{customer.customerIdCode}</div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm text-gray-500">
-                      {customer!.outstandingDays} day(s) outstanding
+                      {customer.outstandingDays} day{customer.outstandingDays !== 1 ? "s" : ""} due
                     </div>
                     <div className="font-semibold text-green-700">
-                      Expected: {formatCedi(customer!.expectedAmount)}
+                      Expected: {formatCedi(customer.expectedAmount)}
                     </div>
                   </div>
                 </div>
                 <div className="text-xs text-gray-400 mb-3">
-                  Daily contribution: {formatCedi(customer!.dailyContribution)}/day
+                  Daily: {formatCedi(customer.dailyContribution)}/day
                 </div>
                 <button
                   onClick={() => {
-                    setRecordingFor(customer!);
-                    setCollectAmount(String(customer!.expectedAmount));
+                    setRecordingFor(customer);
+                    setCollectAmount(String(customer.expectedAmount));
                   }}
                   className="btn btn-primary btn-sm w-full"
                 >
-                  💵 Record Collection
+                  💵 Collect
                 </button>
               </div>
             ))}
@@ -204,19 +243,49 @@ export default function CollectorDashboardPage() {
         </div>
       )}
 
-      {/* No outstanding customers */}
-      {data && data.outstandingObligations.filter(Boolean).length === 0 && (
+      {/* All caught up */}
+      {data && allDone && (
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-center">
-          <p className="text-3xl mb-2">✅</p>
-          <p className="font-medium text-gray-700">All caught up!</p>
-          <p className="text-sm text-gray-500">No outstanding collections for today.</p>
+          <p className="text-3xl mb-2">🎉</p>
+          <p className="font-medium text-gray-700">All collections completed for today!</p>
+          <p className="text-sm text-gray-500 mt-1">{totalAssigned} of {totalAssigned} customers collected</p>
         </div>
       )}
 
-      {/* Recent Remittances */}
+      {/* COLLECTED TODAY */}
+      {data && collected > 0 && (
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <h2 className="text-lg font-semibold mb-1">Collected Today</h2>
+          <p className="text-sm text-gray-500 mb-4">{collected} customer{collected !== 1 ? "s" : ""} collected</p>
+          <div className="space-y-2">
+            {data.collectedToday.map((customer) => (
+              <div
+                key={customer.accountId}
+                className="flex items-center justify-between p-3 rounded-lg bg-green-50 border border-green-100"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-green-600 text-lg">✓</span>
+                  <div>
+                    <div className="font-medium text-sm">{customer.customerName}</div>
+                    <div className="text-xs text-gray-500">{customer.customerIdCode}</div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-semibold text-sm text-green-700">{formatCedi(customer.amountCollected)}</div>
+                  <div className="text-xs text-gray-500">
+                    {customer.daysCovered} day{customer.daysCovered !== 1 ? "s" : ""} covered · {formatTime(customer.collectedAt)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recent Money Handed In */}
       {data && data.recentRemittances.length > 0 && (
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h2 className="text-lg font-semibold mb-4">Recent Remittances</h2>
+          <h2 className="text-lg font-semibold mb-4">Recent Money Handed In</h2>
           <div className="space-y-2">
             {data.recentRemittances.map((r) => (
               <div key={r.id} className="flex justify-between items-center p-2 rounded-lg bg-gray-50">
@@ -224,7 +293,7 @@ export default function CollectorDashboardPage() {
                   <span className="font-mono">{formatCedi(r.remittedAmount)}</span>
                   {r.variance !== 0 && (
                     <span className={`ml-2 text-xs ${r.variance > 0 ? "text-red-600" : "text-green-600"}`}>
-                      ({r.variance > 0 ? "-" : "+"}GH₵{Math.abs(r.variance).toFixed(2)})
+                      ({r.variance > 0 ? "Short " : "Over "}{formatCedi(Math.abs(r.variance))})
                     </span>
                   )}
                 </div>
@@ -233,7 +302,7 @@ export default function CollectorDashboardPage() {
                     r.status === "reconciled" ? "badge-green" : "badge-red"
                   }`}
                 >
-                  {r.status}
+                  {r.status === "reconciled" ? "Matches" : "Short"}
                 </span>
               </div>
             ))}
@@ -249,8 +318,8 @@ export default function CollectorDashboardPage() {
             <div className="bg-green-50 rounded-lg p-3 mb-4">
               <div className="font-medium">{recordingFor.customerName}</div>
               <div className="text-sm text-gray-600">
-                Outstanding: {recordingFor.outstandingDays} day(s) &bull;{" "}
-                {formatCedi(recordingFor.expectedAmount)}
+                {recordingFor.outstandingDays} day{recordingFor.outstandingDays !== 1 ? "s" : ""} due &bull;{" "}
+                Expected: {formatCedi(recordingFor.expectedAmount)}
               </div>
             </div>
             <div className="form-group">

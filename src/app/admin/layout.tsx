@@ -33,14 +33,14 @@ const navSections: { title: string; items: NavItem[] }[] = [
       { href: "/susu/admin/collectors", label: "Collectors", icon: "🚶" },
       { href: "/susu/admin/contributions", label: "Contributions", icon: "💵" },
       { href: "/susu/admin/withdrawals", label: "Withdrawals", icon: "🏧" },
-      { href: "/susu/admin/remittances", label: "Remittances", icon: "🏦" },
+      { href: "/susu/admin/remittances", label: "Money Handed In", icon: "🏦" },
       { href: "/susu/admin/reports", label: "Reports", icon: "📑" },
     ],
   },
   {
     title: "Administration",
     items: [
-      { href: "/admin/audit", label: "Audit Log", icon: "📝" },
+      { href: "/admin/audit", label: "Activity History", icon: "📝" },
       { href: "/admin/settings", label: "Settings", icon: "⚙️" },
     ],
   },

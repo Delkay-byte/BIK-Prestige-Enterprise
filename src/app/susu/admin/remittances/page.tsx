@@ -118,11 +118,11 @@ export default function SusuRemittancesPage() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Collector Remittances</h1>
-          <p className="text-gray-500 mt-1">Record and reconcile collector money remittances</p>
+          <h1 className="text-2xl font-bold text-gray-900">Collector Money Handed In</h1>
+          <p className="text-gray-500 mt-1">Record and reconcile money collectors bring to the business</p>
         </div>
         <button onClick={() => setShowForm(!showForm)} className="btn btn-primary">
-          {showForm ? "Cancel" : "+ Record Remittance"}
+          {showForm ? "Cancel" : "+ Record Money Handed In"}
         </button>
       </div>
 
@@ -141,7 +141,7 @@ export default function SusuRemittancesPage() {
 
       {showForm && (
         <div className="card mb-6">
-          <h2 className="text-lg font-semibold mb-4">Record Remittance</h2>
+          <h2 className="text-lg font-semibold mb-4">Record Money Handed In</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="form-group">
               <label className="form-label">Collector *</label>
@@ -158,7 +158,7 @@ export default function SusuRemittancesPage() {
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Amount Remitted (GH₵) *</label>
+              <label className="form-label">Amount Handed In (GH₵) *</label>
               <input
                 type="number"
                 step="0.01"
@@ -205,7 +205,7 @@ export default function SusuRemittancesPage() {
         ) : remittances.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             <p className="text-4xl mb-2">🏦</p>
-            <p className="font-medium">No remittances recorded yet</p>
+            <p className="font-medium">No money handed in yet</p>
           </div>
         ) : (
           <>
@@ -215,9 +215,9 @@ export default function SusuRemittancesPage() {
                   <tr>
                     <th>Date</th>
                     <th>Collector</th>
-                    <th>Expected</th>
-                    <th>Remitted</th>
-                    <th>Variance</th>
+                    <th>Expected to Bring In</th>
+                    <th>Amount Handed In</th>
+                    <th>Difference</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -243,7 +243,7 @@ export default function SusuRemittancesPage() {
                               : "badge-yellow"
                           }`}
                         >
-                          {r.status}
+                          {r.status === "reconciled" ? "Matches" : r.status === "discrepancy" ? "Short" : r.status}
                         </span>
                       </td>
                     </tr>
