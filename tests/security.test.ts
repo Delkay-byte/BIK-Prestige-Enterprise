@@ -104,7 +104,7 @@ describe("Session timing", () => {
       role: "admin",
       iat: now - 600,
       exp: now + 900,
-      lastActivityAt: now - 400, // 400 seconds ago > 300s timeout
+      lastActivityAt: now - SESSION_POLICY.INACTIVITY_TIMEOUT_SECONDS - 10, // well past inactivity timeout
     };
 
     const status = validateSessionTiming(payload);
@@ -126,10 +126,10 @@ describe("Session timing", () => {
     expect(status).toBe("absolute_expired");
   });
 
-  it("respects configured timeout values", () => {
-    expect(SESSION_POLICY.INACTIVITY_TIMEOUT_SECONDS).toBe(300);
-    expect(SESSION_POLICY.BACKGROUND_TIMEOUT_SECONDS).toBe(60);
-    expect(SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS).toBe(900);
+  it("respects configured timeout values (generous pilot defaults)", () => {
+    expect(SESSION_POLICY.INACTIVITY_TIMEOUT_SECONDS).toBe(28800);
+    expect(SESSION_POLICY.BACKGROUND_TIMEOUT_SECONDS).toBe(7200);
+    expect(SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS).toBe(28800);
   });
 
   it("freshly created session is immediately valid (no login loop)", async () => {
@@ -170,18 +170,18 @@ describe("Session timing", () => {
     const payload = await verifyToken<JwtPayload>(token);
     expect(payload).not.toBeNull();
 
-    // Simulate 299 seconds of inactivity (just under the 300s limit)
+    // Simulate just under the inactivity timeout
     const now = Math.floor(Date.now() / 1000);
     const nearlyExpired: JwtPayload = {
       ...payload!,
-      lastActivityAt: now - 299,
+      lastActivityAt: now - (SESSION_POLICY.INACTIVITY_TIMEOUT_SECONDS - 1),
     };
     expect(validateSessionTiming(nearlyExpired)).toBe("valid");
 
-    // Simulate 301 seconds of inactivity (just over the limit)
+    // Simulate just over the inactivity timeout
     const expired: JwtPayload = {
       ...payload!,
-      lastActivityAt: now - 301,
+      lastActivityAt: now - (SESSION_POLICY.INACTIVITY_TIMEOUT_SECONDS + 1),
     };
     expect(validateSessionTiming(expired)).toBe("inactivity_expired");
   });

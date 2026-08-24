@@ -26,20 +26,20 @@ function safeInt(value: string | undefined, fallback: number): number {
 }
 
 export const SESSION_POLICY = {
-  /** 5 minutes — inactivity timeout */
+  /** 8 hours — inactivity timeout (generous pilot/testing value) */
   INACTIVITY_TIMEOUT_SECONDS: safeInt(
     process.env.SESSION_IDLE_TIMEOUT_SECONDS,
-    300
+    28800
   ),
-  /** 60 seconds — background/hidden-page grace */
+  /** 2 hours — background/hidden-page grace (generous pilot/testing value) */
   BACKGROUND_TIMEOUT_SECONDS: safeInt(
     process.env.SESSION_BACKGROUND_TIMEOUT_SECONDS,
-    60
+    7200
   ),
-  /** 15 minutes — absolute session lifetime */
+  /** 8 hours — absolute session lifetime (generous pilot/testing value) */
   ABSOLUTE_TIMEOUT_SECONDS: safeInt(
     process.env.SESSION_ABSOLUTE_TIMEOUT_SECONDS,
-    900
+    28800
   ),
   /** Warning shown 60 seconds before inactivity expiry */
   WARNING_BEFORE_SECONDS: 60,

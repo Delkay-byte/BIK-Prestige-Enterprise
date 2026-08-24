@@ -3,6 +3,7 @@ import {
   getAnyAuthUser,
   refreshSession,
   SESSION_COOKIES,
+  SESSION_POLICY,
   type ModuleName,
   type JwtPayload,
 } from "@/lib/auth";
@@ -29,8 +30,14 @@ export async function GET() {
     authenticated: true,
     userId: user.userId,
     role: user.role,
-    secondsUntilInactivity: Math.max(0, 300 - (now - lastActivity)),
-    secondsUntilAbsolute: Math.max(0, (user.exp ?? now + 900) - now),
+    secondsUntilInactivity: Math.max(
+      0,
+      SESSION_POLICY.INACTIVITY_TIMEOUT_SECONDS - (now - lastActivity)
+    ),
+    secondsUntilAbsolute: Math.max(
+      0,
+      (user.exp ?? now + SESSION_POLICY.ABSOLUTE_TIMEOUT_SECONDS) - now
+    ),
   });
 }
 

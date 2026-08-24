@@ -4,6 +4,7 @@ import { useState } from "react";
 import { login } from "@/lib/actions/auth.actions";
 import PasswordInput from "@/components/PasswordInput";
 import { markTabAuthenticated } from "@/components/TabSessionGuard";
+import { isRedirectError } from "@/lib/errors";
 
 export default function LoginPage() {
   const [error, setError] = useState("");
@@ -21,7 +22,8 @@ export default function LoginPage() {
       if (result && !result.success) {
         setError(result.error || "Login failed");
       }
-    } catch {
+    } catch (err) {
+      if (isRedirectError(err)) throw err;
       setError("An unexpected error occurred");
     } finally {
       setLoading(false);
