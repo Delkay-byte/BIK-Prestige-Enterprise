@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { logout } from "@/lib/actions/auth.actions";
+import { clearTabSession } from "@/components/TabSessionGuard";
 
 /**
  * Sign-out button with an explicit confirmation step.
@@ -22,6 +23,7 @@ export default function ConfirmSignOutButton({
   async function confirmSignOut() {
     setBusy(true);
     try {
+      clearTabSession();
       await logout();
     } finally {
       setBusy(false);

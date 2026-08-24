@@ -6,6 +6,7 @@ import { useState } from "react";
 import ConfirmSignOutButton from "@/components/ConfirmSignOutButton";
 import RefreshGuard from "@/components/RefreshGuard";
 import SessionMonitor from "@/components/SessionMonitor";
+import TabSessionGuard from "@/components/TabSessionGuard";
 
 interface NavItem {
   href: string;
@@ -58,6 +59,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <TabSessionGuard />
       <SessionMonitor />
       <RefreshGuard />
       {/* Mobile header */}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { selectWorkspace } from "@/lib/actions/auth.actions";
+import { markTabAuthenticated } from "@/components/TabSessionGuard";
 
 interface Selection {
   userId: string;
@@ -50,6 +51,7 @@ export default function SelectWorkspacePage() {
     try {
       const result = await selectWorkspace(moduleKey);
       if (result.success) {
+        markTabAuthenticated();
         router.push(MODULE_META[moduleKey].path);
         router.refresh();
       } else {

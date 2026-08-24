@@ -5,6 +5,7 @@ import { useState } from "react";
 import ConfirmSignOutButton from "@/components/ConfirmSignOutButton";
 import RefreshGuard from "@/components/RefreshGuard";
 import SessionMonitor from "@/components/SessionMonitor";
+import TabSessionGuard from "@/components/TabSessionGuard";
 import WorkspaceSwitcher from "@/components/WorkspaceSwitcher";
 
 export default function CollectorLayout({ children }: { children: React.ReactNode }) {
@@ -13,6 +14,7 @@ export default function CollectorLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <TabSessionGuard />
       <SessionMonitor />
       <RefreshGuard />
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-40">

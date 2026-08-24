@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { login } from "@/lib/actions/auth.actions";
 import PasswordInput from "@/components/PasswordInput";
+import { markTabAuthenticated } from "@/components/TabSessionGuard";
 
 export default function LoginPage() {
   const [error, setError] = useState("");
@@ -12,6 +13,10 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
+      // Mark this tab as authenticated BEFORE the server redirect.
+      // sessionStorage is tab-scoped, so a new tab pasting a URL will
+      // NOT have this flag and will be redirected to /login.
+      markTabAuthenticated();
       const result = await login(formData);
       if (result && !result.success) {
         setError(result.error || "Login failed");

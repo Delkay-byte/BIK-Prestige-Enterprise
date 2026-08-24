@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { logout } from "@/lib/actions/auth.actions";
+import { clearTabSession } from "@/components/TabSessionGuard";
 
 /**
  * Refresh/session guard for protected pages.
@@ -45,6 +46,7 @@ export default function RefreshGuard() {
     // shares the original Navigation Timing entry and must NOT log out.
     if (navType === "reload" && !alreadyHandled) {
       try { window.sessionStorage.setItem(HANDLED_KEY, "1"); } catch {}
+      clearTabSession();
       void logout();
     }
 

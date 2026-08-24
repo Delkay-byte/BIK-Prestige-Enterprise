@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { logout } from "@/lib/actions/auth.actions";
+import { clearTabSession } from "@/components/TabSessionGuard";
 
 /**
  * SessionMonitor — client-side session security enforcement.
@@ -32,6 +33,7 @@ async function logTimeoutAndLogout(reason: string) {
   } catch {
     /* best-effort */
   }
+  clearTabSession();
   await logout();
 }
 
@@ -209,6 +211,7 @@ export default function SessionMonitor() {
   const handleSignOut = async () => {
     setShowInactivityWarning(false);
     setShowAbsoluteWarning(false);
+    clearTabSession();
     await logout();
   };
 
