@@ -66,7 +66,8 @@ function formatTime(isoString: string): string {
   return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
-const OFFLINE_ENABLED = process.env.NEXT_PUBLIC_OFFLINE_COLLECTIONS_ENABLED === "true";
+// Offline is enabled per-user via device enrollment, not a global flag.
+// The server checks enrollment status before allowing offline operations.
 
 export default function CollectorDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -83,6 +84,7 @@ export default function CollectorDashboardPage() {
   const [lastSyncTime, setLastSyncTime] = useState<string>("");
   const [offlineAuthExpired, setOfflineAuthExpired] = useState(false);
   const [offlineAuthExpiry, setOfflineAuthExpiry] = useState(0);
+  const [offlineEnabled, setOfflineEnabled] = useState(false);
 
   // UI state
   const [searchQuery, setSearchQuery] = useState("");
@@ -99,15 +101,12 @@ export default function CollectorDashboardPage() {
   // Initialize
   useEffect(() => {
     loadData();
-    if (OFFLINE_ENABLED) {
-      initOffline();
-    }
-    return () => { if (OFFLINE_ENABLED) stopAutoSync(); };
+    return () => { stopAutoSync(); };
   }, []);
 
   // Online/offline listener
   useEffect(() => {
-    if (!OFFLINE_ENABLED) return;
+    if (!offlineEnabled) return;
     const handleOnline = () => { setIsOnline(true); attemptSync(); };
     const handleOffline = () => setIsOnline(false);
     window.addEventListener("online", handleOnline);
@@ -122,7 +121,20 @@ export default function CollectorDashboardPage() {
   async function initOffline() {
     const did = await getOrCreateDeviceId();
     setDeviceId(did);
-    // Enroll device with server
+    // Check if device is already enrolled
+    try {
+      const checkRes = await fetch(`/api/offline/enroll?deviceId=${did}`);
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        if (checkData.enrolled) {
+          setOfflineEnabled(true);
+          if (checkData.device?.authorizedAt) {
+            setOfflineAuthorizedAt(checkData.device.authorizedAt);
+          }
+        }
+      }
+    } catch { /* will try enrollment below */ }
+    // Enroll device with server (idempotent)
     try {
       const res = await fetch("/api/offline/enroll", {
         method: "POST",
@@ -130,6 +142,7 @@ export default function CollectorDashboardPage() {
         body: JSON.stringify({ deviceId: did, module: "susu" }),
       });
       if (res.ok) {
+        setOfflineEnabled(true);
         const data = await res.json();
         if (data.device?.authorizedAt) {
           setOfflineAuthorizedAt(data.device.authorizedAt);
@@ -157,7 +170,7 @@ export default function CollectorDashboardPage() {
 
   // Periodically check offline auth expiry
   useEffect(() => {
-    if (!OFFLINE_ENABLED) return;
+    if (!offlineEnabled) return;
     const interval = setInterval(() => {
       setOfflineAuthExpired(isOfflineAuthExpired());
       setOfflineAuthExpiry(secondsUntilOfflineAuthExpiry());
@@ -240,7 +253,7 @@ export default function CollectorDashboardPage() {
       }
 
       // Offline: queue the transaction
-      if (OFFLINE_ENABLED && deviceId) {
+      if (offlineEnabled && deviceId) {
         const idempotencyKey = `${deviceId}-${crypto.randomUUID()}`;
         const tx: OfflineTransaction = {
           id: crypto.randomUUID(),
@@ -320,7 +333,7 @@ export default function CollectorDashboardPage() {
             <h1 className="text-2xl font-bold text-gray-900">{getGreeting()}, {user?.fullName || "Collector"} 👋</h1>
             <p className="text-sm text-green-600 italic mt-1">&ldquo;{quote}&rdquo;</p>
           </div>
-          {OFFLINE_ENABLED && (
+          {offlineEnabled && (
             <div className="text-right">
               {offlineAuthExpired && !isOnline ? (
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700">
@@ -347,7 +360,7 @@ export default function CollectorDashboardPage() {
       {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
 
       {/* Pending Sync Banner */}
-      {OFFLINE_ENABLED && pendingTxs.length > 0 && (
+      {offlineEnabled && pendingTxs.length > 0 && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-yellow-600 text-lg">⏳</span>
@@ -411,7 +424,7 @@ export default function CollectorDashboardPage() {
                   {f === "all" ? "All" : f === "visit" ? "To Visit" : "Collected"}
                 </button>
               ))}
-              {OFFLINE_ENABLED && pendingTxs.length > 0 && (
+              {offlineEnabled && pendingTxs.length > 0 && (
                 <button onClick={() => setFilter("pending")}
                   className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${filter === "pending" ? "bg-yellow-100 text-yellow-700" : "bg-gray-50 text-gray-500 hover:bg-gray-100"}`}>
                   ⏳ Pending ({pendingTxs.length})
@@ -553,12 +566,12 @@ export default function CollectorDashboardPage() {
                 {recordingFor.outstandingDays} day{recordingFor.outstandingDays !== 1 ? "s" : ""} due · Expected: {formatCedi(recordingFor.expectedAmount)}
               </div>
             </div>
-            {!isOnline && OFFLINE_ENABLED && offlineAuthExpired && (
+            {!isOnline && offlineEnabled && offlineAuthExpired && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-2 mb-4 text-xs text-red-700">
                 ⚠️ Reconnect to the internet and sign in again before continuing offline work.
               </div>
             )}
-            {!isOnline && OFFLINE_ENABLED && !offlineAuthExpired && (
+            {!isOnline && offlineEnabled && !offlineAuthExpired && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 mb-4 text-xs text-yellow-700">
                 ⚠️ You&apos;re offline. This will be saved on your device and synced when you reconnect.
               </div>
@@ -576,8 +589,8 @@ export default function CollectorDashboardPage() {
               <input type="text" value={collectNotes} onChange={(e) => setCollectNotes(e.target.value)} placeholder="Any note..." />
             </div>
             <div className="flex gap-3 mt-4">
-              <button onClick={handleRecordCollection} className="btn btn-primary flex-1" disabled={submitting || (!isOnline && OFFLINE_ENABLED && offlineAuthExpired)}>
-                {submitting ? "Recording..." : !isOnline && OFFLINE_ENABLED ? (offlineAuthExpired ? "🔒 Reconnect Required" : "💾 Save on Device") : "✅ Record"}
+              <button onClick={handleRecordCollection} className="btn btn-primary flex-1" disabled={submitting || (!isOnline && offlineEnabled && offlineAuthExpired)}>
+                {submitting ? "Recording..." : !isOnline && offlineEnabled ? (offlineAuthExpired ? "🔒 Reconnect Required" : "💾 Save on Device") : "✅ Record"}
               </button>
               <button onClick={() => { setRecordingFor(null); setCollectAmount(""); }} className="btn btn-secondary flex-1">Cancel</button>
             </div>
