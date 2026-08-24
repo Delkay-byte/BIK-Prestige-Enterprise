@@ -21,9 +21,8 @@ import {
 import { loginSchema } from "@/lib/validations";
 import { createAuditLog } from "@/lib/audit";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { cookies } from "next/headers";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export interface ActionResponse {
   success: boolean;
@@ -39,14 +38,12 @@ function dashboardPathFor(module: ModuleName): string {
 export async function login(
   formData: FormData
 ): Promise<ActionResponse | void> {
-  // Rate limiting: 5 attempts per 15 minutes per email+IP
-  // Uses email+IP so one user's failures don't lock out others on the same Render proxy.
-  const hdrs = await headers();
-  const clientIp = getClientIp(hdrs);
+  // Rate limiting: 5 attempts per 15 minutes per email account.
+  // Keyed on email only (not IP) so each account is independent.
   const email = (formData.get("email") as string)?.trim();
 
   if (email) {
-    const rateLimitResult = checkRateLimit(`login:${email.toLowerCase()}:${clientIp}`);
+    const rateLimitResult = checkRateLimit(`login:${email.toLowerCase()}`);
     if (!rateLimitResult.allowed) {
       return {
         success: false,
