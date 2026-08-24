@@ -247,17 +247,34 @@ export async function logout(): Promise<void> {
 /**
  * Verify the current user's password (for step-up reauthentication).
  * Does not log the password.  Only checks against the active session.
+ *
+ * Security: we prefer the admin session and refuse to fall through to
+ * worker/collector sessions when the admin session is unavailable — this
+ * prevents silently verifying against the wrong user if the admin cookie
+ * is missing or temporarily invalid.
  */
 export async function verifyPasswordAction(
   password: string
 ): Promise<ActionResponse> {
-  const contexts: Array<{ module: ModuleName; user: JwtPayload | null }> = [
-    { module: "admin", user: await getAdminSession() },
-    { module: "momo", user: await getMomoSession() },
-    { module: "susu", user: await getSusuSession() },
-  ];
-  const context = contexts.find((c) => c.user !== null);
-  if (!context || !context.user) {
+  // Trim whitespace from pasted passwords to avoid hash mismatch
+  const trimmedPassword = password.trim();
+
+  // Try each session, but prefer admin and log which module was used.
+  const adminUser = await getAdminSession();
+  const momoUser = await getMomoSession();
+  const susuUser = await getSusuSession();
+
+  let context: { module: ModuleName; user: JwtPayload } | null = null;
+
+  if (adminUser) {
+    context = { module: "admin", user: adminUser };
+  } else if (momoUser) {
+    context = { module: "momo", user: momoUser };
+  } else if (susuUser) {
+    context = { module: "susu", user: susuUser };
+  }
+
+  if (!context) {
     return { success: false, error: "Not authenticated" };
   }
 
@@ -271,13 +288,14 @@ export async function verifyPasswordAction(
     return { success: false, error: "User not found" };
   }
 
-  const valid = await verifyPassword(password, dbUser.passwordHash);
+  const valid = await verifyPassword(trimmedPassword, dbUser.passwordHash);
   if (!valid) {
     await createAuditLog({
       userId: context.user.userId,
       action: "auth.reauth_failed",
       entityType: "user",
       entityId: context.user.userId,
+      details: { module: context.module },
     });
     return { success: false, error: "Incorrect password" };
   }
@@ -287,6 +305,7 @@ export async function verifyPasswordAction(
     action: "auth.reauth_success",
     entityType: "user",
     entityId: context.user.userId,
+    details: { module: context.module },
   });
 
   return { success: true };
