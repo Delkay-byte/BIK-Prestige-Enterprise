@@ -6,6 +6,10 @@ export const metadata: Metadata = {
   title: "BIK Prestige Enterprise - Management Platform",
   description: "BIK Prestige Enterprise Management Platform — Built by BloomCore Technologies",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/branding/bik-prestige-icon.svg",
+    apple: "/branding/bik-prestige-icon.svg",
+  },
   appleWebApp: { capable: true, statusBarStyle: "default", title: "BIK Prestige" },
 };
 

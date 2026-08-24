@@ -68,6 +68,7 @@ export async function login(
     email: user.email,
     role: user.role as "admin" | "worker" | "collector",
     locationId: user.locationId ?? undefined,
+    forcePasswordReset: user.forcePasswordReset,
   });
 
   await setAuthCookie(token);
@@ -78,6 +79,11 @@ export async function login(
     entityType: "user",
     entityId: user.id,
   });
+
+  // Check if user must change password on first login
+  if (user.forcePasswordReset) {
+    redirect("/settings?tab=password");
+  }
 
   if (user.role === "admin") {
     redirect("/admin/dashboard");
@@ -137,6 +143,18 @@ export async function changePassword(
     where: { id: user.userId },
     data: { passwordHash: newHash, forcePasswordReset: false },
   });
+
+  // Re-issue the session token so the force-reset flag clears immediately
+  // without requiring the user to log out and back in.
+  const token = await createToken({
+    userId: user.userId,
+    email: user.email,
+    role: user.role,
+    locationId: user.locationId,
+    collectorId: user.collectorId,
+    forcePasswordReset: false,
+  });
+  await setAuthCookie(token);
 
   await createAuditLog({
     userId: user.userId,

@@ -24,6 +24,7 @@ export interface JwtPayload {
   role: "admin" | "worker" | "collector";
   locationId?: string;
   collectorId?: string;
+  forcePasswordReset?: boolean;
 }
 
 export async function hashPassword(password: string): Promise<string> {

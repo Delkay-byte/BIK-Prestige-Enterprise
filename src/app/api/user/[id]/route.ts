@@ -13,8 +13,8 @@ export async function GET(
 
   const { id } = await params;
 
-  // Workers can only see their own info
-  if (authUser.role === "worker" && authUser.userId !== id) {
+  // Workers and collectors can only see their own info
+  if ((authUser.role === "worker" || authUser.role === "collector") && authUser.userId !== id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

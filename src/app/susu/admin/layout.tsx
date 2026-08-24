@@ -38,7 +38,10 @@ const navSections: { title: string; items: NavItem[] }[] = [
   },
   {
     title: "Administration",
-    items: [{ href: "/admin/audit", label: "Audit Log", icon: "📝" }],
+    items: [
+      { href: "/admin/audit", label: "Audit Log", icon: "📝" },
+      { href: "/settings", label: "Settings", icon: "⚙️" },
+    ],
   },
 ];
 

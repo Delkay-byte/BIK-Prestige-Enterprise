@@ -7,6 +7,7 @@ import { logout } from "@/lib/actions/auth.actions";
 export default function CollectorLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [showMenu, setShowMenu] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   async function handleLogout() {
     await logout();
@@ -15,7 +16,13 @@ export default function CollectorLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
-        <span className="font-bold text-green-700 text-lg">BIK Prestige</span>
+        <img
+          src="/branding/bik-prestige-icon.svg"
+          alt="BIK Prestige Enterprise"
+          className="h-8 w-8"
+          width={32}
+          height={32}
+        />
         <div className="relative">
           <button
             onClick={() => setShowMenu(!showMenu)}
@@ -27,7 +34,7 @@ export default function CollectorLayout({ children }: { children: React.ReactNod
           </button>
           {showMenu && (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+              <div className="fixed inset-0 z-40" onClick={() => { setShowMenu(false); setShowSettings(false); }} />
               <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                 <button
                   onClick={() => {
@@ -38,16 +45,19 @@ export default function CollectorLayout({ children }: { children: React.ReactNod
                 >
                   📊 Dashboard
                 </button>
-                <button
-                  onClick={() => {
-                    router.push("/change-password");
-                    setShowMenu(false);
-                  }}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  🔑 Change Password
-                </button>
-                <hr className="my-1" />
+                {showSettings ? (
+                  <>
+                    <button onClick={() => { router.push("/settings"); setShowMenu(false); setShowSettings(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">👤 Profile</button>
+                    <button onClick={() => { router.push("/settings?tab=password"); setShowMenu(false); setShowSettings(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">🔐 Change Password</button>
+                    <button onClick={() => setShowSettings(false)} className="w-full text-left px-4 py-2 text-sm text-gray-500 hover:bg-gray-50">← Back</button>
+                    <hr className="my-1" />
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => setShowSettings(true)} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">⚙️ Settings</button>
+                    <hr className="my-1" />
+                  </>
+                )}
                 <button
                   onClick={handleLogout}
                   className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"

@@ -12,7 +12,7 @@ if (!JWT_SECRET_RAW) {
 }
 const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_RAW);
 
-const PUBLIC_ROUTES = ["/login", "/api/health", "/api/diag"];
+const PUBLIC_ROUTES = ["/login", "/api/health", "/api/diag", "/settings", "/change-password"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -67,6 +67,13 @@ export async function middleware(request: NextRequest) {
         );
       }
     }
+
+    // Force password change for users with forcePasswordReset flag
+      // Allow access to /settings and /change-password so they can change it
+      const forceReset = payload.forcePasswordReset as boolean | undefined;
+      if (forceReset && !pathname.startsWith("/settings") && !pathname.startsWith("/change-password")) {
+        return NextResponse.redirect(new URL("/settings?tab=password", request.url));
+      }
 
     return NextResponse.next();
   } catch {

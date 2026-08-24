@@ -38,7 +38,10 @@ const navSections: { title: string; items: NavItem[] }[] = [
   },
   {
     title: "Administration",
-    items: [{ href: "/admin/audit", label: "Audit Log", icon: "📝" }],
+    items: [
+      { href: "/admin/audit", label: "Audit Log", icon: "📝" },
+      { href: "/settings", label: "Settings", icon: "⚙️" },
+    ],
   },
 ];
 
@@ -64,7 +67,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <span className="font-bold text-green-700">BIK Prestige</span>
+        <img
+          src="/branding/bik-prestige-icon.svg"
+          alt="BIK Prestige Enterprise"
+          className="h-8 w-8"
+          width={32}
+          height={32}
+        />
         <span className="text-sm text-gray-500">Admin</span>
       </div>
 
@@ -76,8 +85,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Sidebar */}
       <aside className={`fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-200 z-50 transform transition-transform md:translate-x-0 overflow-y-auto ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="p-6 border-b border-gray-200">
-          <h1 className="text-lg font-bold text-green-700">BIK Prestige Enterprise</h1>
-          <p className="text-xs text-gray-400 mt-1">Built by BloomCore Technologies</p>
+          <img
+            src="/branding/bik-prestige-logo.svg"
+            alt="BIK Prestige Enterprise"
+            className="h-9 w-auto"
+            width={180}
+            height={90}
+          />
+          <p className="text-xs text-gray-400 mt-2">Built by BloomCore Technologies</p>
         </div>
         <nav className="p-4">
           {navSections.map((section) => (
