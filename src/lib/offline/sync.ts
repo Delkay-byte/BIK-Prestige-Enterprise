@@ -16,6 +16,39 @@ import {
   type OfflineTransaction,
 } from "./store";
 
+// ── Offline Authorization Timeout ──────────────────────────────────────
+
+const OFFLINE_AUTH_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours
+let offlineAuthorizedAt: number | null = null;
+
+/**
+ * Set the offline authorization timestamp (from server enrollment response).
+ */
+export function setOfflineAuthorizedAt(timestamp: number | Date): void {
+  offlineAuthorizedAt = typeof timestamp === "number"
+    ? timestamp
+    : new Date(timestamp).getTime();
+}
+
+/**
+ * Check if offline authorization has expired.
+ * Returns true if the device needs to reconnect.
+ */
+export function isOfflineAuthExpired(): boolean {
+  if (!offlineAuthorizedAt) return false; // No enrollment yet
+  return Date.now() - offlineAuthorizedAt > OFFLINE_AUTH_TIMEOUT_MS;
+}
+
+/**
+ * Get seconds until offline authorization expires.
+ * Returns 0 if already expired.
+ */
+export function secondsUntilOfflineAuthExpiry(): number {
+  if (!offlineAuthorizedAt) return 0;
+  const remaining = OFFLINE_AUTH_TIMEOUT_MS - (Date.now() - offlineAuthorizedAt);
+  return Math.max(0, Math.floor(remaining / 1000));
+}
+
 // ── Retry Policy ───────────────────────────────────────────────────────
 
 const RETRY_DELAYS = [0, 5_000, 30_000, 120_000, 600_000]; // ms
@@ -94,6 +127,7 @@ let syncInProgress = false;
  */
 export async function syncPendingTransactions(): Promise<SyncResult[]> {
   if (syncInProgress) return [];
+  if (isOfflineAuthExpired()) return []; // Don't sync if authorization expired
   syncInProgress = true;
 
   const results: SyncResult[] = [];

@@ -369,6 +369,7 @@ model DeviceEnrollment {
   module       String                 // "momo" | "susu"
   status       String   @default("active") // active | revoked
   lastSyncAt   DateTime?
+  authorizedAt DateTime @default(now()) // When last authorized (for offline timeout)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

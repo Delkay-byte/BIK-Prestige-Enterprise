@@ -41,13 +41,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Verify device enrollment
+    // 2. Verify device enrollment + offline authorization timeout
     const device = await db.deviceEnrollment.findFirst({
       where: { deviceId, userId: user.userId, status: "active" },
     });
     if (!device) {
+      // Audit the rejection
+      await createAuditLog({
+        userId: user.userId,
+        action: "offline.sync_rejected",
+        entityType: "device",
+        entityId: deviceId,
+        details: { reason: "Device not enrolled or revoked", deviceId },
+      });
       return NextResponse.json(
         { success: false, error: "Device not enrolled or revoked" },
+        { status: 403 }
+      );
+    }
+
+    // Check offline authorization timeout (24 hours)
+    const OFFLINE_AUTH_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+    const authorizedAt = device.authorizedAt ?? device.createdAt;
+    const timeSinceAuth = Date.now() - new Date(authorizedAt).getTime();
+    if (timeSinceAuth > OFFLINE_AUTH_TIMEOUT_MS) {
+      await createAuditLog({
+        userId: user.userId,
+        action: "offline.sync_rejected",
+        entityType: "device",
+        entityId: device.id,
+        details: { reason: "Offline authorization expired", deviceId },
+      });
+      return NextResponse.json(
+        { success: false, error: "Offline authorization expired. Please reconnect and sign in again." },
         { status: 403 }
       );
     }
@@ -222,10 +248,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 10. Update device last sync time
+    // 10. Update device last sync time + re-authorize (extend offline window)
     await db.deviceEnrollment.update({
       where: { id: device.id },
-      data: { lastSyncAt: new Date() },
+      data: { lastSyncAt: new Date(), authorizedAt: new Date() },
     });
 
     // 11. Audit

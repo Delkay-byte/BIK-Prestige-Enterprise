@@ -41,6 +41,7 @@ const navSections: { title: string; items: NavItem[] }[] = [
     title: "Administration",
     items: [
       { href: "/admin/audit", label: "Activity History", icon: "📝" },
+      { href: "/admin/devices", label: "Offline Devices", icon: "📱" },
       { href: "/admin/settings", label: "Settings", icon: "⚙️" },
     ],
   },

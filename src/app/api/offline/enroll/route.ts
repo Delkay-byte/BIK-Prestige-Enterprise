@@ -33,10 +33,12 @@ export async function POST(request: NextRequest) {
         deviceName: deviceName || null,
         module: mod,
         status: "active",
+        authorizedAt: new Date(),
       },
       update: {
         status: "active",
         lastSyncAt: new Date(),
+        authorizedAt: new Date(),
       },
     });
 
