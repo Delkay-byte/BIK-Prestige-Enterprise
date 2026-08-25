@@ -5,27 +5,35 @@
  */
 export const CEDI_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 100 100" style="display:inline-block;vertical-align:baseline;font-size:inherit"><text y="80" x="5" font-size="90" font-family="system-ui,-apple-system,sans-serif" fill="currentColor">₵</text></svg>';
 
+/**
+ * Format a number with thousands separators and 2 decimal places.
+ * Handles negatives consistently: -GH₵ 3,700.00
+ * Used internally by formatCedi/formatCediHtml.
+ */
+function formatAmount(num: number): string {
+  const abs = Math.abs(num);
+  const formatted = abs.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return num < 0 ? `-GH₵ ${formatted}` : `GH₵ ${formatted}`;
+}
+
 // Format Ghanaian Cedi currency — returns plain text with the cedi character.
 // For HTML rendering, use formatCediHtml() instead.
 export function formatCedi(amount: number | string): string {
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  return `GH\u20B5 ${num.toLocaleString("en-GH", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  if (isNaN(num)) return "GH₵ 0.00";
+  return formatAmount(num);
 }
 
 /**
  * Format Ghanaian Cedi currency for HTML rendering.
- * Uses a plain "GH" + the cedi character. This works reliably because
- * we provide an explicit font stack that includes a cedi-capable font.
+ * Works identically to formatCedi — the .cedi CSS class in CediAmount
+ * handles Android font fallback.
  */
 export function formatCediHtml(amount: number | string): string {
-  const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  return `GH\u20B5${num.toLocaleString("en-GH", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return formatCedi(amount);
 }
 
 // Format date for display

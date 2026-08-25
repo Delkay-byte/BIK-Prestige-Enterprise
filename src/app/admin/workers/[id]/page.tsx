@@ -7,6 +7,7 @@ import { getWorkerById, updateWorker, resetWorkerPassword } from "@/lib/actions/
 import { getActiveLocations } from "@/lib/actions/location.actions";
 import PasswordInput from "@/components/PasswordInput";
 import ReauthDialog from "@/components/ReauthDialog";
+import { formatCedi } from "@/lib/utils";
 
 interface WorkerDetail {
   id: string; fullName: string; email: string; phone?: string | null; role: string;
@@ -165,7 +166,7 @@ export default function WorkerDetailPage() {
                             <span className="text-green-600">✓ Matches</span>
                           ) : (
                             <span className="text-red-600">
-                              Total Difference: {variance > 0 ? "+" : ""}GH\u20B5{variance.toFixed(2)}
+                              Total Difference: {formatCedi(variance)}
                               <br />⚠ Check Required
                             </span>
                           )}

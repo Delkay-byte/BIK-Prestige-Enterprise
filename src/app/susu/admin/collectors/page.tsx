@@ -12,6 +12,7 @@ import {
 import { getActiveLocations } from "@/lib/actions/location.actions";
 import PasswordInput from "@/components/PasswordInput";
 import ReauthDialog from "@/components/ReauthDialog";
+import { formatCedi } from "@/lib/utils";
 
 interface CollectorData {
   id: string;
@@ -229,7 +230,7 @@ export default function SusuCollectorsPage() {
                       </td>
                       <td>{c.assignments.length}</td>
                       <td className="font-mono text-sm">
-                        {todayCollected > 0 ? `GH₵${todayCollected.toFixed(2)}` : "—"}
+                        {todayCollected > 0 ? formatCedi(todayCollected) : "—"}
                       </td>
                       <td>
                         {lastRemittance ? (

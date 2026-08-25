@@ -45,6 +45,27 @@ describe("formatCedi", () => {
     expect(result).toContain("GH₵");
     expect(result).toContain("1,000");
   });
+
+  it("formats negative values with minus before GH₵", () => {
+    const result = formatCedi(-3700);
+    expect(result).toBe("-GH₵ 3,700.00");
+  });
+
+  it("formats negative decimals", () => {
+    const result = formatCedi(-250.6);
+    expect(result).toBe("-GH₵ 250.60");
+  });
+
+  it("formats zero as GH₵ 0.00", () => {
+    const result = formatCedi(0);
+    expect(result).toBe("GH₵ 0.00");
+  });
+
+  it("formats positive values with GH₵ prefix", () => {
+    expect(formatCedi(250.6)).toBe("GH₵ 250.60");
+    expect(formatCedi(1500)).toBe("GH₵ 1,500.00");
+    expect(formatCedi(1000000)).toBe("GH₵ 1,000,000.00");
+  });
 });
 
 // ============================================================

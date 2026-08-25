@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin } from "@/lib/auth";
 import { createAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
+import { formatCedi } from "@/lib/utils";
 
 export interface ActionResponse {
   success: boolean;
@@ -94,7 +95,7 @@ export async function processWithdrawal(params: {
   if (requestedAmount > availableAfterCommission) {
     return {
       success: false,
-      error: `Insufficient balance. Available: GH₵${availableAfterCommission.toFixed(2)}${commissionAmount > 0 ? ` (after GH₵${commissionAmount} commission)` : ""}`,
+      error: `Insufficient balance. Available: ${formatCedi(availableAfterCommission)}${commissionAmount > 0 ? ` (after ${formatCedi(commissionAmount)} commission)` : ""}`,
     };
   }
 

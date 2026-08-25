@@ -137,7 +137,7 @@ export default function SusuContributionsPage() {
       if (result.success) {
         const data = result.data as { daysAllocated: number; allocatedAmount: number };
         setSuccess(
-          `Recorded GH₵${amountNum.toFixed(2)} — ${data.daysAllocated} days allocated (${formatCedi(data.allocatedAmount)})`
+          `Recorded ${formatCedi(amountNum)} — ${data.daysAllocated} days allocated (${formatCedi(data.allocatedAmount)})`
         );
         setShowForm(false);
         setSelectedCustomer(null);

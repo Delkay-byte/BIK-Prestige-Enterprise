@@ -20,12 +20,13 @@ export default function CediAmount({
   showSign?: boolean;
 }) {
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  const formatted = num.toLocaleString("en-GH", {
+  const abs = Math.abs(num);
+  const formatted = abs.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 
-  const sign = showSign && num > 0 ? "+" : "";
+  const sign = num < 0 ? "-" : showSign && num > 0 ? "+" : "";
 
   return (
     <span className={`cedi ${className}`}>

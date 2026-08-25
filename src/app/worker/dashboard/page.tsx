@@ -4,7 +4,7 @@ import { isRedirectError } from "@/lib/errors";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getWorkerDailyAccounts, createDailyAccount } from "@/lib/actions/daily-account.actions";
-import { formatDate, getGreeting, getTodayString, getDailyQuote } from "@/lib/utils";
+import { formatCedi, formatDate, getGreeting, getTodayString, getDailyQuote } from "@/lib/utils";
 import Link from "next/link";
 
 interface DailyAccount {
@@ -120,7 +120,7 @@ export default function WorkerDashboardPage() {
                           <span className="text-green-600">✓ Matches</span>
                         ) : (
                           <span className="text-red-600">
-                            Total Difference: {variance > 0 ? "+" : ""}GH&#x20B5;{variance.toFixed(2)}
+                            Total Difference: {formatCedi(variance)}
                             <br />⚠ Check Required
                           </span>
                         )}
