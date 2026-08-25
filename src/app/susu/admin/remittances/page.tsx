@@ -231,7 +231,7 @@ export default function SusuRemittancesPage() {
                       <td className="font-mono text-sm font-semibold"><CediAmount amount={r.remittedAmount} /></td>
                       <td className="font-mono text-sm">
                         <span className={r.variance === 0 ? "text-green-600" : "text-red-600"}>
-                          {r.variance === 0 ? "GH₵0.00" : <> {r.variance > 0 ? "+" : ""}<CediAmount amount={r.variance} /></>}
+                          <CediAmount amount={r.variance} />
                         </span>
                       </td>
                       <td>

@@ -114,20 +114,20 @@ export default function ReportDetailPage() {
           <div className="space-y-3">
             <div className="bg-gray-50 rounded-lg p-3">
               <div className="text-sm text-gray-600 mb-1">MoMo Difference</div>
-              <div className={`text-lg font-bold ${momoVariance === 0 ? "text-green-600" : "text-red-600"}`}>{momoVariance === 0 ? "GH\u20B5 0.00" : <> {momoVariance > 0 ? "+" : ""}<CediAmount amount={momoVariance} /></>}</div>
+              <div className={`text-lg font-bold ${momoVariance === 0 ? "text-green-600" : "text-red-600"}`}><CediAmount amount={momoVariance} /></div>
               <div className="text-xs text-gray-500 mt-1">Expected: <CediAmount amount={Number(account.openingMomoFloat) + Number(account.totalCashIn) - Number(account.totalCashOut)} /> &bull; Reported: <CediAmount amount={account.closingMomoFloat} /></div>
             </div>
             <div className="bg-gray-50 rounded-lg p-3">
               <div className="text-sm text-gray-600 mb-1">Cash Difference</div>
-              <div className={`text-lg font-bold ${cashVariance === 0 ? "text-green-600" : "text-red-600"}`}>{cashVariance === 0 ? "GH\u20B5 0.00" : <> {cashVariance > 0 ? "+" : ""}<CediAmount amount={cashVariance} /></>}</div>
+              <div className={`text-lg font-bold ${cashVariance === 0 ? "text-green-600" : "text-red-600"}`}><CediAmount amount={cashVariance} /></div>
               <div className="text-xs text-gray-500 mt-1">Expected: <CediAmount amount={Number(account.openingCash) + Number(account.totalCashReceived) + Number(account.commission) + Number(account.otherIncome) - Number(account.totalCashPaid) - Number(account.totalExpenses)} /> &bull; Reported: <CediAmount amount={account.closingCash} /></div>
             </div>
             <div className="border-t pt-3">
               <div className="flex justify-between items-center">
                 <span className="font-medium">Total Difference</span>
-                <span className={`text-xl font-bold ${totalVariance === 0 ? "text-green-600" : "text-red-600"}`}>{totalVariance === 0 ? "GH\u20B5 0.00" : <> {totalVariance > 0 ? "+" : ""}<CediAmount amount={totalVariance} /></>}</span>
+                <span className={`text-xl font-bold ${totalVariance === 0 ? "text-green-600" : "text-red-600"}`}><CediAmount amount={totalVariance} /></span>
               </div>
-              <div className="text-right"><span className={`badge ${totalVariance === 0 ? "badge-green" : "badge-red"} mt-1`}>{totalVariance === 0 ? "Matches" : "\u26A0 Check Required"}</span></div>
+              <div className="text-right"><span className={`badge ${totalVariance === 0 ? "badge-green" : "badge-red"} mt-1`}>{totalVariance === 0 ? "Matches" : "⚠ Check Required"}</span></div>
             </div>
           </div>
         </div>
