@@ -226,7 +226,10 @@ export async function getCustomerById(id: string) {
           cycles: {
             orderBy: { cycleNumber: "desc" },
             include: {
-              contributions: { orderBy: { collectionDate: "asc" } },
+              contributions: {
+                orderBy: { collectionDate: "asc" },
+                include: { allocations: true },
+              },
               withdrawals: { orderBy: { createdAt: "desc" } },
               commissions: true,
             },
