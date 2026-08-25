@@ -4,47 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import ConfirmSignOutButton from "@/components/ConfirmSignOutButton";
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: string;
-}
-
-const navSections: { title: string; items: NavItem[] }[] = [
-  {
-    title: "",
-    items: [{ href: "/admin/dashboard", label: "Dashboard", icon: "📊" }],
-  },
-  {
-    title: "MoMo",
-    items: [
-      { href: "/admin/locations", label: "Locations", icon: "📍" },
-      { href: "/admin/workers", label: "Workers", icon: "👥" },
-      { href: "/admin/reports", label: "Reports", icon: "📋" },
-    ],
-  },
-  {
-    title: "Susu",
-    items: [
-      { href: "/susu/admin", label: "Overview", icon: "💰" },
-      { href: "/susu/admin/customers", label: "Customers", icon: "🧑" },
-      { href: "/susu/admin/collectors", label: "Collectors", icon: "🚶" },
-      { href: "/susu/admin/contributions", label: "Contributions", icon: "💵" },
-      { href: "/susu/admin/withdrawals", label: "Withdrawals", icon: "🏧" },
-      { href: "/susu/admin/remittances", label: "Money Handed In", icon: "🏦" },
-      { href: "/susu/admin/reports", label: "Reports", icon: "📑" },
-    ],
-  },
-  {
-    title: "Administration",
-    items: [
-      { href: "/admin/audit", label: "Activity History", icon: "📝" },
-      { href: "/admin/devices", label: "Offline Devices", icon: "📱" },
-      { href: "/admin/settings", label: "Settings", icon: "⚙️" },
-    ],
-  },
-];
+import { navSections } from "@/lib/admin-nav";
 
 export default function SusuAdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -81,8 +41,12 @@ export default function SusuAdminLayout({ children }: { children: React.ReactNod
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-200 z-50 transform transition-transform md:translate-x-0 overflow-y-auto ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className="p-6 border-b border-gray-200">
+      <aside
+        className={`fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-200 z-50 flex flex-col transform transition-transform md:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="p-6 border-b border-gray-200 flex-none">
           <img
             src="/branding/bik-prestige-logo.svg"
             alt="BIK Prestige Enterprise"
@@ -91,7 +55,7 @@ export default function SusuAdminLayout({ children }: { children: React.ReactNod
             height={90}
           />
         </div>
-        <nav className="p-4">
+        <nav className="p-4 flex-1 overflow-y-auto">
           {navSections.map((section) => (
             <div key={section.title || "main"} className="mb-4">
               {section.title && (
@@ -117,7 +81,7 @@ export default function SusuAdminLayout({ children }: { children: React.ReactNod
             </div>
           ))}
         </nav>
-        <div className="p-4 border-t border-gray-200">
+        <div className="p-4 border-t border-gray-200 flex-none">
           <ConfirmSignOutButton className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 w-full transition-colors" />
         </div>
       </aside>
