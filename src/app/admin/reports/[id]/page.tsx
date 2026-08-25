@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getDailyAccountById, reviewDailyAccount } from "@/lib/actions/daily-account.actions";
 import { formatCedi, formatDate, formatDateTime } from "@/lib/utils";
+import CediAmount from "@/components/CediAmount";
 
 interface AccountDetail {
   id: string; businessDate: Date; status: string; submittedAt?: Date | null; reviewedAt?: Date | null;
@@ -82,15 +83,15 @@ export default function ReportDetailPage() {
             <div>
               <h4 className="text-sm font-medium text-gray-500 mb-2">Starting Balances</h4>
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-blue-50 rounded-lg p-3"><div className="text-xs text-blue-600">MoMo Balance</div><div className="font-semibold text-blue-800">{formatCedi(account.openingMomoFloat)}</div></div>
-                <div className="bg-green-50 rounded-lg p-3"><div className="text-xs text-green-600">Cash on Hand</div><div className="font-semibold text-green-800">{formatCedi(account.openingCash)}</div></div>
+                <div className="bg-blue-50 rounded-lg p-3"><div className="text-xs text-blue-600">MoMo Balance</div><div className="font-semibold text-blue-800"><CediAmount amount={account.openingMomoFloat} /></div></div>
+                <div className="bg-green-50 rounded-lg p-3"><div className="text-xs text-green-600">Cash on Hand</div><div className="font-semibold text-green-800"><CediAmount amount={account.openingCash} /></div></div>
               </div>
             </div>
             <div>
               <h4 className="text-sm font-medium text-gray-500 mb-2">Ending Balances</h4>
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-blue-50 rounded-lg p-3"><div className="text-xs text-blue-600">MoMo Balance</div><div className="font-semibold text-blue-800">{formatCedi(account.closingMomoFloat)}</div></div>
-                <div className="bg-green-50 rounded-lg p-3"><div className="text-xs text-green-600">Cash on Hand</div><div className="font-semibold text-green-800">{formatCedi(account.closingCash)}</div></div>
+                <div className="bg-blue-50 rounded-lg p-3"><div className="text-xs text-blue-600">MoMo Balance</div><div className="font-semibold text-blue-800"><CediAmount amount={account.closingMomoFloat} /></div></div>
+                <div className="bg-green-50 rounded-lg p-3"><div className="text-xs text-green-600">Cash on Hand</div><div className="font-semibold text-green-800"><CediAmount amount={account.closingCash} /></div></div>
               </div>
             </div>
           </div>
@@ -99,12 +100,12 @@ export default function ReportDetailPage() {
         <div className="card">
           <h3 className="font-semibold mb-4">Daily Business Totals</h3>
           <div className="space-y-2">
-            <div className="flex justify-between"><span className="text-sm text-gray-600">Money Added to MoMo</span><span className="font-mono text-sm">{formatCedi(account.totalCashIn)}</span></div>
-            <div className="flex justify-between"><span className="text-sm text-gray-600">Money Paid from MoMo</span><span className="font-mono text-sm">{formatCedi(account.totalCashOut)}</span></div>
-            <div className="flex justify-between"><span className="text-sm text-gray-600">Cash Received</span><span className="font-mono text-sm">{formatCedi(account.totalCashReceived)}</span></div>
-            <div className="flex justify-between"><span className="text-sm text-gray-600">Cash Paid Out</span><span className="font-mono text-sm">{formatCedi(account.totalCashPaid)}</span></div>
-            <div className="flex justify-between"><span className="text-sm text-gray-600">Commission Earned</span><span className="font-mono text-sm">{formatCedi(account.commission)}</span></div>
-            <div className="flex justify-between"><span className="text-sm text-gray-600">Other Income</span><span className="font-mono text-sm">{formatCedi(account.otherIncome)}</span></div>
+            <div className="flex justify-between"><span className="text-sm text-gray-600">Money Added to MoMo</span><span className="font-mono text-sm"><CediAmount amount={account.totalCashIn} /></span></div>
+            <div className="flex justify-between"><span className="text-sm text-gray-600">Money Paid from MoMo</span><span className="font-mono text-sm"><CediAmount amount={account.totalCashOut} /></span></div>
+            <div className="flex justify-between"><span className="text-sm text-gray-600">Cash Received</span><span className="font-mono text-sm"><CediAmount amount={account.totalCashReceived} /></span></div>
+            <div className="flex justify-between"><span className="text-sm text-gray-600">Cash Paid Out</span><span className="font-mono text-sm"><CediAmount amount={account.totalCashPaid} /></span></div>
+            <div className="flex justify-between"><span className="text-sm text-gray-600">Commission Earned</span><span className="font-mono text-sm"><CediAmount amount={account.commission} /></span></div>
+            <div className="flex justify-between"><span className="text-sm text-gray-600">Other Income</span><span className="font-mono text-sm"><CediAmount amount={account.otherIncome} /></span></div>
           </div>
         </div>
 
@@ -113,18 +114,18 @@ export default function ReportDetailPage() {
           <div className="space-y-3">
             <div className="bg-gray-50 rounded-lg p-3">
               <div className="text-sm text-gray-600 mb-1">MoMo Difference</div>
-              <div className={`text-lg font-bold ${momoVariance === 0 ? "text-green-600" : "text-red-600"}`}>{momoVariance === 0 ? "GH\u20B5 0.00" : `${momoVariance > 0 ? "+" : ""}${formatCedi(momoVariance)}`}</div>
-              <div className="text-xs text-gray-500 mt-1">Expected: {formatCedi(Number(account.openingMomoFloat) + Number(account.totalCashIn) - Number(account.totalCashOut))} &bull; Reported: {formatCedi(account.closingMomoFloat)}</div>
+              <div className={`text-lg font-bold ${momoVariance === 0 ? "text-green-600" : "text-red-600"}`}>{momoVariance === 0 ? "GH\u20B5 0.00" : <> {momoVariance > 0 ? "+" : ""}<CediAmount amount={momoVariance} /></>}</div>
+              <div className="text-xs text-gray-500 mt-1">Expected: <CediAmount amount={Number(account.openingMomoFloat) + Number(account.totalCashIn) - Number(account.totalCashOut)} /> &bull; Reported: <CediAmount amount={account.closingMomoFloat} /></div>
             </div>
             <div className="bg-gray-50 rounded-lg p-3">
               <div className="text-sm text-gray-600 mb-1">Cash Difference</div>
-              <div className={`text-lg font-bold ${cashVariance === 0 ? "text-green-600" : "text-red-600"}`}>{cashVariance === 0 ? "GH\u20B5 0.00" : `${cashVariance > 0 ? "+" : ""}${formatCedi(cashVariance)}`}</div>
-              <div className="text-xs text-gray-500 mt-1">Expected: {formatCedi(Number(account.openingCash) + Number(account.totalCashReceived) + Number(account.commission) + Number(account.otherIncome) - Number(account.totalCashPaid) - Number(account.totalExpenses))} &bull; Reported: {formatCedi(account.closingCash)}</div>
+              <div className={`text-lg font-bold ${cashVariance === 0 ? "text-green-600" : "text-red-600"}`}>{cashVariance === 0 ? "GH\u20B5 0.00" : <> {cashVariance > 0 ? "+" : ""}<CediAmount amount={cashVariance} /></>}</div>
+              <div className="text-xs text-gray-500 mt-1">Expected: <CediAmount amount={Number(account.openingCash) + Number(account.totalCashReceived) + Number(account.commission) + Number(account.otherIncome) - Number(account.totalCashPaid) - Number(account.totalExpenses)} /> &bull; Reported: <CediAmount amount={account.closingCash} /></div>
             </div>
             <div className="border-t pt-3">
               <div className="flex justify-between items-center">
                 <span className="font-medium">Total Difference</span>
-                <span className={`text-xl font-bold ${totalVariance === 0 ? "text-green-600" : "text-red-600"}`}>{totalVariance === 0 ? "GH\u20B5 0.00" : `${totalVariance > 0 ? "+" : ""}${formatCedi(totalVariance)}`}</span>
+                <span className={`text-xl font-bold ${totalVariance === 0 ? "text-green-600" : "text-red-600"}`}>{totalVariance === 0 ? "GH\u20B5 0.00" : <> {totalVariance > 0 ? "+" : ""}<CediAmount amount={totalVariance} /></>}</span>
               </div>
               <div className="text-right"><span className={`badge ${totalVariance === 0 ? "badge-green" : "badge-red"} mt-1`}>{totalVariance === 0 ? "Matches" : "\u26A0 Check Required"}</span></div>
             </div>
@@ -138,12 +139,12 @@ export default function ReportDetailPage() {
               {account.expenses.map((expense) => (
                 <div key={expense.id} className="flex justify-between items-center p-2 rounded-lg bg-gray-50">
                   <span className="text-sm">{expense.description}</span>
-                  <span className="font-mono text-sm">{formatCedi(expense.amount)}</span>
+                  <span className="font-mono text-sm"><CediAmount amount={expense.amount} /></span>
                 </div>
               ))}
               <div className="flex justify-between items-center pt-2 border-t font-medium">
                 <span>Total Expenses</span>
-                <span className="font-mono">{formatCedi(account.totalExpenses)}</span>
+                <span className="font-mono"><CediAmount amount={account.totalExpenses} /></span>
               </div>
             </div>
           )}

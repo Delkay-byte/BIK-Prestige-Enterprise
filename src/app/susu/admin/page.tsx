@@ -4,6 +4,7 @@ import { isRedirectError } from "@/lib/errors";
 import { useEffect, useState } from "react";
 import { getSusuDashboardStats } from "@/lib/actions/susu-dashboard.actions";
 import { formatCedi } from "@/lib/utils";
+import CediAmount from "@/components/CediAmount";
 
 interface DashboardStats {
   activeCustomers: number;
@@ -136,7 +137,7 @@ export default function SusuAdminOverviewPage() {
           </div>
           <div>
             <div className="text-gray-500">Net Paid to Customers Today</div>
-            <div className="font-semibold text-lg text-green-700">{formatCedi(stats.todayNetPaid)}</div>
+            <div className="font-semibold text-lg text-green-700"><CediAmount amount={stats.todayNetPaid} /></div>
           </div>
         </div>
       </div>

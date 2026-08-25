@@ -8,6 +8,7 @@ import { getActiveLocations } from "@/lib/actions/location.actions";
 import PasswordInput from "@/components/PasswordInput";
 import ReauthDialog from "@/components/ReauthDialog";
 import { formatCedi } from "@/lib/utils";
+import CediAmount from "@/components/CediAmount";
 
 interface WorkerDetail {
   id: string; fullName: string; email: string; phone?: string | null; role: string;
@@ -166,7 +167,7 @@ export default function WorkerDetailPage() {
                             <span className="text-green-600">✓ Matches</span>
                           ) : (
                             <span className="text-red-600">
-                              Total Difference: {formatCedi(variance)}
+                              Total Difference: <CediAmount amount={variance} />
                               <br />⚠ Check Required
                             </span>
                           )}

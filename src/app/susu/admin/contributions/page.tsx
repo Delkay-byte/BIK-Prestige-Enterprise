@@ -6,6 +6,7 @@ import { getContributions, recordContribution } from "@/lib/actions/susu-contrib
 import { searchCustomers } from "@/lib/actions/susu-customer.actions";
 import { getCollectors } from "@/lib/actions/susu-collector.actions";
 import { formatCedi, formatDate, formatDateTime } from "@/lib/utils";
+import CediAmount from "@/components/CediAmount";
 
 interface Contribution {
   id: string;
@@ -19,6 +20,7 @@ interface Contribution {
   };
   allocations: Array<{ cycleDay: number; amount: number }>;
   collector?: { user: { fullName: string } } | null;
+  recordedBy?: { fullName: string } | null;
 }
 
 interface CustomerSearchResult {
@@ -209,7 +211,7 @@ export default function SusuContributionsPage() {
                     <div className="font-medium text-sm">{c.fullName}</div>
                     <div className="text-xs text-gray-500">
                       {c.customerId} &bull; {c.accounts[0]?.accountId} &bull;{" "}
-                      {formatCedi(c.accounts[0]?.dailyContribution || 0)}/day
+                      <CediAmount amount={c.accounts[0]?.dailyContribution || 0} />/day
                     </div>
                   </button>
                 ))}
@@ -222,7 +224,7 @@ export default function SusuContributionsPage() {
               <div className="font-medium">{selectedCustomer.fullName}</div>
               <div className="text-sm text-gray-600">
                 Account: {selectedCustomer.accounts[0]?.accountId} &bull; Daily:{" "}
-                {formatCedi(selectedCustomer.accounts[0]?.dailyContribution || 0)}/day
+                <CediAmount amount={selectedCustomer.accounts[0]?.dailyContribution || 0} />/day
               </div>
             </div>
           )}
@@ -344,7 +346,7 @@ export default function SusuContributionsPage() {
                     <th>Amount</th>
                     <th>Days Covered</th>
                     <th>Channel</th>
-                    <th>Collector</th>
+                    <th>Received By</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -355,7 +357,7 @@ export default function SusuContributionsPage() {
                         <div className="font-medium text-sm">{c.account.customer.fullName}</div>
                         <div className="text-xs text-gray-500">{c.account.customer.customerId}</div>
                       </td>
-                      <td className="font-mono font-semibold">{formatCedi(c.amount)}</td>
+                      <td className="font-mono font-semibold"><CediAmount amount={c.amount} /></td>
                       <td>
                         <span className="badge badge-blue">{c.allocations.length} day(s)</span>
                       </td>
@@ -365,7 +367,9 @@ export default function SusuContributionsPage() {
                         </span>
                       </td>
                       <td className="text-sm">
-                        {c.collector?.user?.fullName || "—"}
+                        {c.channel === "collector"
+                          ? c.collector?.user?.fullName || "—"
+                          : c.recordedBy?.fullName || "Not recorded"}
                       </td>
                     </tr>
                   ))}

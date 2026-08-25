@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { getContributions } from "@/lib/actions/susu-contribution.actions";
 import { getWithdrawals } from "@/lib/actions/susu-withdrawal.actions";
 import { formatCedi, formatDate, formatDateTime } from "@/lib/utils";
+import CediAmount from "@/components/CediAmount";
 
 type Tab = "contributions" | "withdrawals";
 
@@ -190,7 +191,7 @@ export default function SusuReportsPage() {
                         <div className="font-medium text-sm">{c.account.customer.fullName}</div>
                         <div className="text-xs text-gray-500">{c.account.customer.customerId}</div>
                       </td>
-                      <td className="font-mono font-semibold">{formatCedi(c.amount)}</td>
+                      <td className="font-mono font-semibold"><CediAmount amount={c.amount} /></td>
                       <td><span className="badge badge-blue">{c.allocations.length}</span></td>
                       <td><span className={`badge ${c.channel === "collector" ? "badge-yellow" : "badge-green"}`}>{c.channel}</span></td>
                     </tr>
@@ -226,11 +227,11 @@ export default function SusuReportsPage() {
                         <div className="font-medium text-sm">{w.account.customer.fullName}</div>
                         <div className="text-xs text-gray-500">{w.account.customer.customerId}</div>
                       </td>
-                      <td className="font-mono text-sm">{formatCedi(w.requestedAmount)}</td>
+                      <td className="font-mono text-sm"><CediAmount amount={w.requestedAmount} /></td>
                       <td className="font-mono text-sm">
                         {w.commissionAmount > 0 ? formatCedi(w.commissionAmount) : <span className="text-gray-400">—</span>}
                       </td>
-                      <td className="font-mono text-sm font-semibold">{formatCedi(w.netAmount)}</td>
+                      <td className="font-mono text-sm font-semibold"><CediAmount amount={w.netAmount} /></td>
                       <td><span className="badge badge-blue">Cycle {w.cycle.cycleNumber}</span></td>
                     </tr>
                   ))}

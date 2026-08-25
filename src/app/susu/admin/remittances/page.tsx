@@ -8,6 +8,7 @@ import {
   getCollectors,
 } from "@/lib/actions/susu-collector.actions";
 import { formatCedi, formatDateTime } from "@/lib/utils";
+import CediAmount from "@/components/CediAmount";
 
 interface RemittanceRecord {
   id: string;
@@ -97,7 +98,7 @@ export default function SusuRemittancesPage() {
       if (result.success) {
         const data = result.data as { variance: number; expectedAmount: number };
         setSuccess(
-          `Remittance recorded. Expected: ${formatCedi(data.expectedAmount)}, Remitted: ${formatCedi(amountNum)}, Variance: ${formatCedi(data.variance)}`
+          `Money handed in recorded. Expected: ${formatCedi(data.expectedAmount)}, Handed In: ${formatCedi(amountNum)}, Difference: ${formatCedi(data.variance)}`
         );
         setShowForm(false);
         setSelectedCollector("");
@@ -226,11 +227,11 @@ export default function SusuRemittancesPage() {
                     <tr key={r.id}>
                       <td className="text-sm">{formatDateTime(r.createdAt)}</td>
                       <td className="font-medium text-sm">{r.collector.user.fullName}</td>
-                      <td className="font-mono text-sm">{formatCedi(r.expectedAmount)}</td>
-                      <td className="font-mono text-sm font-semibold">{formatCedi(r.remittedAmount)}</td>
+                      <td className="font-mono text-sm"><CediAmount amount={r.expectedAmount} /></td>
+                      <td className="font-mono text-sm font-semibold"><CediAmount amount={r.remittedAmount} /></td>
                       <td className="font-mono text-sm">
                         <span className={r.variance === 0 ? "text-green-600" : "text-red-600"}>
-                          {r.variance === 0 ? "GH₵0.00" : `${r.variance > 0 ? "+" : ""}${formatCedi(r.variance)}`}
+                          {r.variance === 0 ? "GH₵0.00" : <> {r.variance > 0 ? "+" : ""}<CediAmount amount={r.variance} /></>}
                         </span>
                       </td>
                       <td>

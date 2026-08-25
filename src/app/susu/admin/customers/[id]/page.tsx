@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { getCustomerById, reassignCustomer } from "@/lib/actions/susu-customer.actions";
 import { getCollectors } from "@/lib/actions/susu-collector.actions";
 import { formatCedi, formatDate, formatDateTime } from "@/lib/utils";
+import CediAmount from "@/components/CediAmount";
 
 interface CustomerDetail {
   id: string;
@@ -34,21 +35,21 @@ interface CustomerDetail {
         id: string;
         amount: number;
         collectionDate: Date;
-        channel: string;
-        allocations: Array<{ cycleDay: number; amount: number }>;
-      }>;
-      withdrawals: Array<{
-        id: string;
-        requestedAmount: number;
-        commissionAmount: number;
-        netAmount: number;
-        remainingBalance: number;
-        createdAt: Date;
-        notes?: string | null;
-      }>;
-      commissions: Array<{ id: string; amount: number; createdAt: Date }>;
-    }>;
-  }>;
+        channel: string;                          allocations: Array<{ cycleDay: number; amount: number }>;
+                          recordedBy?: { fullName: string } | null;
+                        }>;
+                        withdrawals: Array<{
+                          id: string;
+                          requestedAmount: number;
+                          commissionAmount: number;
+                          netAmount: number;
+                          remainingBalance: number;
+                          createdAt: Date;
+                          notes?: string | null;
+                        }>;
+                        commissions: Array<{ id: string; amount: number; createdAt: Date }>;
+                      }>;
+                    }>;
   assignments: Array<{
     id: string;
     active: boolean;
@@ -237,7 +238,7 @@ export default function SusuCustomerDetailPage() {
             <div className="card">
               <div className="text-sm text-gray-500 mb-1">Daily Contribution</div>
               <div className="font-semibold text-lg text-green-700">
-                {formatCedi(account.dailyContribution)}/day
+                <CediAmount amount={account.dailyContribution} />/day
               </div>
             </div>
           </>
@@ -272,7 +273,7 @@ export default function SusuCustomerDetailPage() {
           {account.cardFees.map((fee) => (
             <div key={fee.id} className="flex justify-between items-center p-2 rounded-lg bg-gray-50">
               <span className="text-sm">Card Purchase Fee</span>
-              <span className="font-mono font-semibold">{formatCedi(fee.amount)}</span>
+              <span className="font-mono font-semibold"><CediAmount amount={fee.amount} /></span>
             </div>
           ))}
         </div>
@@ -293,7 +294,7 @@ export default function SusuCustomerDetailPage() {
                       {formatDate(cycle.startDate)} to {formatDate(cycle.endDate)}
                     </h3>
                     <p className="text-sm text-gray-500">
-                      {stats.paidDays}/31 days paid &bull; Daily rate: {formatCedi(cycle.dailyContribution)}
+                      {stats.paidDays}/31 days paid &bull; Daily rate: <CediAmount amount={cycle.dailyContribution} />
                     </p>
                   </div>
                   <span
@@ -309,20 +310,20 @@ export default function SusuCustomerDetailPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                   <div className="bg-green-50 rounded-lg p-3">
                     <div className="text-xs text-green-600">Gross Contributions</div>
-                    <div className="font-semibold">{formatCedi(stats.totalContributed)}</div>
+                    <div className="font-semibold"><CediAmount amount={stats.totalContributed} /></div>
                   </div>
                   <div className="bg-purple-50 rounded-lg p-3">
                     <div className="text-xs text-purple-600">Commission Charged</div>
-                    <div className="font-semibold">{formatCedi(stats.totalCommissions)}</div>
+                    <div className="font-semibold"><CediAmount amount={stats.totalCommissions} /></div>
                   </div>
                   <div className="bg-orange-50 rounded-lg p-3">
                     <div className="text-xs text-orange-600">Total Withdrawn</div>
-                    <div className="font-semibold">{formatCedi(stats.totalWithdrawn)}</div>
+                    <div className="font-semibold"><CediAmount amount={stats.totalWithdrawn} /></div>
                   </div>
                   <div className="bg-blue-50 rounded-lg p-3">
                     <div className="text-xs text-blue-600">Remaining Balance</div>
                     <div className="font-semibold">
-                      {formatCedi(stats.totalContributed - stats.totalWithdrawn - stats.totalCommissions)}
+                      <CediAmount amount={stats.totalContributed - stats.totalWithdrawn - stats.totalCommissions} />
                     </div>
                   </div>
                 </div>
@@ -337,10 +338,15 @@ export default function SusuCustomerDetailPage() {
                           <div>
                             <span>{formatDate(c.collectionDate)}</span>
                             <span className="text-gray-400 ml-2">
-                              ({c.channel === "collector" ? "Collector" : "Direct Office"})
+                              ({c.channel === "collector" ? "Collector" : "Office"})
+                              {c.channel === "direct_office" && c.recordedBy?.fullName
+                                ? ` — Received by ${c.recordedBy.fullName}`
+                                : c.channel === "collector"
+                                ? ``
+                                : " — Not recorded"}
                             </span>
                           </div>
-                          <span className="font-mono">{formatCedi(c.amount)}</span>
+                          <span className="font-mono"><CediAmount amount={c.amount} /></span>
                         </div>
                       ))}
                     </div>
@@ -358,14 +364,14 @@ export default function SusuCustomerDetailPage() {
                             <span>{formatDateTime(w.createdAt)}</span>
                             {w.commissionAmount > 0 && (
                               <span className="text-orange-600 ml-2">
-                                (incl. {formatCedi(w.commissionAmount)} commission)
+                                (incl. <CediAmount amount={w.commissionAmount} /> commission)
                               </span>
                             )}
                           </div>
                           <div className="text-right">
-                            <div className="font-mono font-semibold">{formatCedi(w.netAmount)}</div>
+                            <div className="font-mono font-semibold"><CediAmount amount={w.netAmount} /></div>
                             <div className="text-xs text-gray-500">
-                              Balance: {formatCedi(w.remainingBalance)}
+                              Balance: <CediAmount amount={w.remainingBalance} />
                             </div>
                           </div>
                         </div>

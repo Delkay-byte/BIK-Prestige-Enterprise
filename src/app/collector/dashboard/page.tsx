@@ -16,6 +16,7 @@ import {
 } from "@/lib/offline/store";
 import { getOrCreateDeviceId } from "@/lib/offline/device";
 import { syncPendingTransactions, checkConnectivity, startAutoSync, stopAutoSync, isOfflineAuthExpired, secondsUntilOfflineAuthExpiry, setOfflineAuthorizedAt, type SyncResult } from "@/lib/offline/sync";
+import CediAmount from "@/components/CediAmount";
 
 interface ToVisitCustomer {
   accountId: string;
@@ -400,7 +401,7 @@ export default function CollectorDashboardPage() {
               </div>
               <div className="text-gray-300 text-xl">·</div>
               <div className="text-center flex-1">
-                <div className="text-2xl font-bold text-gray-700">{formatCedi(data.todayCollected)}</div>
+                <div className="text-2xl font-bold text-gray-700"><CediAmount amount={data.todayCollected} /></div>
                 <div className="text-xs text-gray-500">Collected Today</div>
               </div>
             </div>
@@ -455,10 +456,10 @@ export default function CollectorDashboardPage() {
                   <div className="font-medium text-sm truncate" title={customer.customerName}>{customer.customerName}</div>
                   <div className="text-xs text-gray-400 mb-2">{customer.customerIdCode}</div>
                   <div className="flex justify-between text-xs text-gray-500 mb-1">
-                    <span>Daily: {formatCedi(customer.dailyContribution)}</span>
+                    <span>Daily: <CediAmount amount={customer.dailyContribution} /></span>
                     <span>{customer.outstandingDays}d due</span>
                   </div>
-                  <div className="font-semibold text-sm text-green-700">{formatCedi(customer.expectedAmount)}</div>
+                  <div className="font-semibold text-sm text-green-700"><CediAmount amount={customer.expectedAmount} /></div>
                 </div>
                 <button onClick={() => { setRecordingFor(customer); setCollectAmount(String(customer.expectedAmount)); }}
                   className="btn btn-primary btn-sm w-full mt-3">💵 Collect</button>
@@ -497,7 +498,7 @@ export default function CollectorDashboardPage() {
                     <span className="text-yellow-600">⏳</span>
                     <span className="font-medium text-sm truncate">{cust?.customerName || "Customer"}</span>
                   </div>
-                  <div className="font-semibold text-sm text-yellow-800">{formatCedi(payload.amount)}</div>
+                  <div className="font-semibold text-sm text-yellow-800"><CediAmount amount={payload.amount} /></div>
                   <div className="text-xs text-yellow-600 mt-1">
                     Saved {formatTime(tx.localTimestamp)} · {tx.retryCount > 0 ? `Retry ${tx.retryCount}/${tx.maxRetries}` : "Waiting"}
                   </div>
@@ -521,7 +522,7 @@ export default function CollectorDashboardPage() {
                   <span className="font-medium text-sm truncate">{customer.customerName}</span>
                 </div>
                 <div className="text-xs text-gray-400 mb-2">{customer.customerIdCode}</div>
-                <div className="font-semibold text-sm text-green-700">{formatCedi(customer.amountCollected)}</div>
+                <div className="font-semibold text-sm text-green-700"><CediAmount amount={customer.amountCollected} /></div>
                 <div className="text-xs text-gray-500 mt-1">
                   {customer.daysCovered} day{customer.daysCovered !== 1 ? "s" : ""} covered · {formatTime(customer.collectedAt)}
                 </div>
@@ -539,10 +540,10 @@ export default function CollectorDashboardPage() {
             {data.recentRemittances.map((r) => (
               <div key={r.id} className="flex justify-between items-center p-2 rounded-lg bg-gray-50">
                 <div className="text-sm">
-                  <span className="font-mono">{formatCedi(r.remittedAmount)}</span>
+                  <span className="font-mono"><CediAmount amount={r.remittedAmount} /></span>
                   {r.variance !== 0 && (
                     <span className={`ml-2 text-xs ${r.variance > 0 ? "text-red-600" : "text-green-600"}`}>
-                      ({r.variance > 0 ? "Short " : "Over "}{formatCedi(Math.abs(r.variance))})
+                      ({r.variance > 0 ? "Short " : "Over "}<CediAmount amount={Math.abs(r.variance)} />)
                     </span>
                   )}
                 </div>
@@ -563,7 +564,7 @@ export default function CollectorDashboardPage() {
             <div className="bg-green-50 rounded-lg p-3 mb-4">
               <div className="font-medium">{recordingFor.customerName}</div>
               <div className="text-sm text-gray-600">
-                {recordingFor.outstandingDays} day{recordingFor.outstandingDays !== 1 ? "s" : ""} due · Expected: {formatCedi(recordingFor.expectedAmount)}
+                {recordingFor.outstandingDays} day{recordingFor.outstandingDays !== 1 ? "s" : ""} due · Expected: <CediAmount amount={recordingFor.expectedAmount} />
               </div>
             </div>
             {!isOnline && offlineEnabled && offlineAuthExpired && (

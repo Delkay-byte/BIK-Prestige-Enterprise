@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { getWorkerDailyAccounts, createDailyAccount } from "@/lib/actions/daily-account.actions";
 import { formatCedi, formatDate, getGreeting, getTodayString, getDailyQuote } from "@/lib/utils";
 import Link from "next/link";
+import CediAmount from "@/components/CediAmount";
 
 interface DailyAccount {
   id: string; businessDate: Date; status: string;
@@ -120,7 +121,7 @@ export default function WorkerDashboardPage() {
                           <span className="text-green-600">✓ Matches</span>
                         ) : (
                           <span className="text-red-600">
-                            Total Difference: {formatCedi(variance)}
+                            Total Difference: <CediAmount amount={variance} />
                             <br />⚠ Check Required
                           </span>
                         )}

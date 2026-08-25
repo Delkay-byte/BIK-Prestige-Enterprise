@@ -228,7 +228,7 @@ export async function getCustomerById(id: string) {
             include: {
               contributions: {
                 orderBy: { collectionDate: "asc" },
-                include: { allocations: true },
+                include: { allocations: true, recordedBy: { select: { fullName: true } } },
               },
               withdrawals: { orderBy: { createdAt: "desc" } },
               commissions: true,

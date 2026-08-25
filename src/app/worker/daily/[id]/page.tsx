@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { getDailyAccountById, saveDailyAccount, submitDailyAccount } from "@/lib/actions/daily-account.actions";
 import { formatCedi, formatDate } from "@/lib/utils";
 import InfoTooltip from "@/components/InfoTooltip";
+import CediAmount from "@/components/CediAmount";
 
 interface Expense { description: string; amount: number; }
 interface AccountDetail {
@@ -192,7 +193,7 @@ export default function DailyAccountFormPage() {
             </div>
           ))}
           <button onClick={addExpense} className="btn btn-secondary btn-sm w-full">+ Add Expense</button>
-          {expenses.length > 0 && <div className="border-t pt-3"><div className="flex justify-between font-medium"><span>Total Business Expenses</span><span className="font-mono">{formatCedi(getTotalExpenses())}</span></div></div>}
+          {expenses.length > 0 && <div className="border-t pt-3"><div className="flex justify-between font-medium"><span>Total Business Expenses</span><span className="font-mono"><CediAmount amount={getTotalExpenses()} /></span></div></div>}
           <div className="flex gap-3"><button onClick={() => setStep(2)} className="btn btn-secondary flex-1">← Back</button><button onClick={() => setStep(4)} className="btn btn-primary flex-1">Next: Ending →</button></div>
         </div>
       )}
@@ -216,14 +217,14 @@ export default function DailyAccountFormPage() {
               <div className="bg-blue-50 rounded-lg p-4">
                 <div className="text-sm text-blue-600 font-medium mb-2">MoMo Balance <InfoTooltip text="MoMo money reconciliation — what the system expects vs. what you have." /></div>
                 <div className="space-y-1 text-sm">
-                  <div className="flex justify-between"><span>Starting Balance</span><span className="font-mono">{formatCedi(openingMomoFloat)}</span></div>
-                  <div className="flex justify-between"><span>Money Added to MoMo</span><span className="font-mono text-green-700">+{formatCedi(totalCashIn)}</span></div>
-                  <div className="flex justify-between"><span>Money Paid from MoMo</span><span className="font-mono text-red-700">-{formatCedi(totalCashOut)}</span></div>
-                  <div className="flex justify-between pt-1 border-t border-blue-200 mt-1"><span className="font-medium">Expected Ending Balance <InfoTooltip text="The balance the system expects after adding money received and subtracting money paid out." /></span><span className="font-mono font-medium">{formatCedi(openingMomoFloat + totalCashIn - totalCashOut)}</span></div>
-                  <div className="flex justify-between"><span>Your Ending Balance</span><span className="font-mono">{formatCedi(closingMomoFloat)}</span></div>
+                  <div className="flex justify-between"><span>Starting Balance</span><span className="font-mono"><CediAmount amount={openingMomoFloat} /></span></div>
+                  <div className="flex justify-between"><span>Money Added to MoMo</span><span className="font-mono text-green-700">+<CediAmount amount={totalCashIn} /></span></div>
+                  <div className="flex justify-between"><span>Money Paid from MoMo</span><span className="font-mono text-red-700">-<CediAmount amount={totalCashOut} /></span></div>
+                  <div className="flex justify-between pt-1 border-t border-blue-200 mt-1"><span className="font-medium">Expected Ending Balance <InfoTooltip text="The balance the system expects after adding money received and subtracting money paid out." /></span><span className="font-mono font-medium"><CediAmount amount={openingMomoFloat + totalCashIn - totalCashOut} /></span></div>
+                  <div className="flex justify-between"><span>Your Ending Balance</span><span className="font-mono"><CediAmount amount={closingMomoFloat} /></span></div>
                 </div>
                 <div className="mt-2 pt-2 border-t border-blue-200">
-                  <div className="flex justify-between"><span className="text-sm font-medium">Difference <InfoTooltip text="The difference between your ending balance and the amount the system expects." /></span><span className={`font-mono font-bold ${momoVariance === 0 ? "text-green-600" : "text-red-600"}`}>{momoVariance === 0 ? "GH\u20B5 0.00" : `${momoVariance > 0 ? "+" : "-"}${formatCedi(Math.abs(momoVariance))}`}</span></div>
+                  <div className="flex justify-between"><span className="text-sm font-medium">Difference <InfoTooltip text="The difference between your ending balance and the amount the system expects." /></span><span className={`font-mono font-bold ${momoVariance === 0 ? "text-green-600" : "text-red-600"}`}>{momoVariance === 0 ? "GH\u20B5 0.00" : <> {momoVariance > 0 ? "+" : "-"}<CediAmount amount={Math.abs(momoVariance)} /></>}</span></div>
                 </div>
               </div>
 
@@ -231,17 +232,17 @@ export default function DailyAccountFormPage() {
               <div className="bg-green-50 rounded-lg p-4">
                 <div className="text-sm text-green-600 font-medium mb-2">Cash on Hand <InfoTooltip text="Physical business cash reconciliation." /></div>
                 <div className="space-y-1 text-sm">
-                  <div className="flex justify-between"><span>Starting Cash</span><span className="font-mono">{formatCedi(openingCash)}</span></div>
-                  <div className="flex justify-between"><span>Cash Received</span><span className="font-mono text-green-700">+{formatCedi(totalCashReceived)}</span></div>
-                  <div className="flex justify-between"><span>Cash Paid Out</span><span className="font-mono text-red-700">-{formatCedi(totalCashPaid)}</span></div>
-                  <div className="flex justify-between"><span>Commission Earned</span><span className="font-mono text-green-700">+{formatCedi(commission)}</span></div>
-                  <div className="flex justify-between"><span>Other Money Received</span><span className="font-mono text-green-700">+{formatCedi(otherIncome)}</span></div>
-                  <div className="flex justify-between"><span>Business Expenses</span><span className="font-mono text-red-700">-{formatCedi(getTotalExpenses())}</span></div>
-                  <div className="flex justify-between pt-1 border-t border-green-200 mt-1"><span className="font-medium">Expected Cash <InfoTooltip text="The balance the system expects after adding money received and subtracting money paid out." /></span><span className="font-mono font-medium">{formatCedi(openingCash + totalCashReceived + commission + otherIncome - totalCashPaid - getTotalExpenses())}</span></div>
-                  <div className="flex justify-between"><span>Your Ending Cash</span><span className="font-mono">{formatCedi(closingCash)}</span></div>
+                  <div className="flex justify-between"><span>Starting Cash</span><span className="font-mono"><CediAmount amount={openingCash} /></span></div>
+                  <div className="flex justify-between"><span>Cash Received</span><span className="font-mono text-green-700">+<CediAmount amount={totalCashReceived} /></span></div>
+                  <div className="flex justify-between"><span>Cash Paid Out</span><span className="font-mono text-red-700">-<CediAmount amount={totalCashPaid} /></span></div>
+                  <div className="flex justify-between"><span>Commission Earned</span><span className="font-mono text-green-700">+<CediAmount amount={commission} /></span></div>
+                  <div className="flex justify-between"><span>Other Money Received</span><span className="font-mono text-green-700">+<CediAmount amount={otherIncome} /></span></div>
+                  <div className="flex justify-between"><span>Business Expenses</span><span className="font-mono text-red-700">-<CediAmount amount={getTotalExpenses()} /></span></div>
+                  <div className="flex justify-between pt-1 border-t border-green-200 mt-1"><span className="font-medium">Expected Cash <InfoTooltip text="The balance the system expects after adding money received and subtracting money paid out." /></span><span className="font-mono font-medium"><CediAmount amount={openingCash + totalCashReceived + commission + otherIncome - totalCashPaid - getTotalExpenses()} /></span></div>
+                  <div className="flex justify-between"><span>Your Ending Cash</span><span className="font-mono"><CediAmount amount={closingCash} /></span></div>
                 </div>
                 <div className="mt-2 pt-2 border-t border-green-200">
-                  <div className="flex justify-between"><span className="text-sm font-medium">Difference <InfoTooltip text="The difference between your ending cash and the amount the system expects." /></span><span className={`font-mono font-bold ${cashVariance === 0 ? "text-green-600" : "text-red-600"}`}>{cashVariance === 0 ? "GH\u20B5 0.00" : `${cashVariance > 0 ? "+" : "-"}${formatCedi(Math.abs(cashVariance))}`}</span></div>
+                  <div className="flex justify-between"><span className="text-sm font-medium">Difference <InfoTooltip text="The difference between your ending cash and the amount the system expects." /></span><span className={`font-mono font-bold ${cashVariance === 0 ? "text-green-600" : "text-red-600"}`}>{cashVariance === 0 ? "GH\u20B5 0.00" : <> {cashVariance > 0 ? "+" : "-"}<CediAmount amount={Math.abs(cashVariance)} /></>}</span></div>
                 </div>
               </div>
 
@@ -249,7 +250,7 @@ export default function DailyAccountFormPage() {
               <div className={`rounded-lg p-4 ${totalVariance === 0 ? "bg-green-100" : "bg-yellow-50 border border-yellow-300"}`}>
                 <div className="flex justify-between items-center">
                   <span className="font-semibold">Total Difference <InfoTooltip text="The combined difference between the expected MoMo balance/cash position and the amounts you reported." /></span>
-                  <span className={`text-xl font-bold ${totalVariance === 0 ? "text-green-700" : "text-red-700"}`}>{totalVariance === 0 ? "GH\u20B5 0.00" : `${totalVariance > 0 ? "+" : "-"}${formatCedi(Math.abs(totalVariance))}`}</span>
+                  <span className={`text-xl font-bold ${totalVariance === 0 ? "text-green-700" : "text-red-700"}`}>{totalVariance === 0 ? "GH\u20B5 0.00" : <> {totalVariance > 0 ? "+" : "-"}<CediAmount amount={Math.abs(totalVariance)} /></>}</span>
                 </div>
                 <div className="mt-1"><span className={`badge ${totalVariance === 0 ? "badge-green" : "badge-red"}`}>{totalVariance === 0 ? "Matches" : "⚠ Check Required"}</span></div>
                 {totalVariance !== 0 && (
@@ -264,9 +265,9 @@ export default function DailyAccountFormPage() {
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
             <h2 className="text-lg font-semibold mb-3">Quick Summary</h2>
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-gray-600">Business Expenses</span><span className="font-mono">{formatCedi(getTotalExpenses())}</span></div>
-              <div className="flex justify-between"><span className="text-gray-600">Commission Earned</span><span className="font-mono">{formatCedi(commission)}</span></div>
-              <div className="flex justify-between"><span className="text-gray-600">Other Money Received</span><span className="font-mono">{formatCedi(otherIncome)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Business Expenses</span><span className="font-mono"><CediAmount amount={getTotalExpenses()} /></span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Commission Earned</span><span className="font-mono"><CediAmount amount={commission} /></span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Other Money Received</span><span className="font-mono"><CediAmount amount={otherIncome} /></span></div>
             </div>
           </div>
 

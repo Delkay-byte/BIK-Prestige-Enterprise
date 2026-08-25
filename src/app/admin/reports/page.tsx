@@ -6,6 +6,7 @@ import { getDailyAccounts } from "@/lib/actions/daily-account.actions";
 import { getLocations } from "@/lib/actions/location.actions";
 import { formatCedi, formatDate } from "@/lib/utils";
 import Link from "next/link";
+import CediAmount from "@/components/CediAmount";
 
 interface Account {
   id: string; businessDate: Date; status: string; submittedAt?: Date | null;
@@ -91,9 +92,9 @@ export default function ReportsPage() {
                       <td><div>{account.location.name}</div><div className="text-xs text-gray-500">{account.location.code}</div></td>
                       <td>{account.worker.fullName}</td>
                       <td><span className={`badge ${account.status === "submitted" ? "badge-green" : account.status === "reviewed" ? "badge-blue" : account.status === "draft" ? "badge-yellow" : "badge-gray"}`}>{account.status === "draft" ? "Draft Saved" : account.status === "submitted" ? "Submitted" : account.status === "reviewed" ? "Reviewed" : account.status}</span></td>
-                      <td className="text-right font-mono text-sm"><span className={Number(account.calculatedMomoVariance) === 0 ? "text-green-600" : "text-red-600"}>{Number(account.calculatedMomoVariance) === 0 ? "GH\u20B5 0" : `${Number(account.calculatedMomoVariance) > 0 ? "+" : ""}${formatCedi(account.calculatedMomoVariance)}`}</span></td>
-                      <td className="text-right font-mono text-sm"><span className={Number(account.calculatedCashVariance) === 0 ? "text-green-600" : "text-red-600"}>{Number(account.calculatedCashVariance) === 0 ? "GH\u20B5 0" : `${Number(account.calculatedCashVariance) > 0 ? "+" : ""}${formatCedi(account.calculatedCashVariance)}`}</span></td>
-                      <td className="text-right font-mono text-sm">{formatCedi(account.totalExpenses)}</td>
+                      <td className="text-right font-mono text-sm"><span className={Number(account.calculatedMomoVariance) === 0 ? "text-green-600" : "text-red-600"}>{Number(account.calculatedMomoVariance) === 0 ? "GH\u20B5 0" : <> {Number(account.calculatedMomoVariance) > 0 ? "+" : ""}<CediAmount amount={account.calculatedMomoVariance} /></>}</span></td>
+                      <td className="text-right font-mono text-sm"><span className={Number(account.calculatedCashVariance) === 0 ? "text-green-600" : "text-red-600"}>{Number(account.calculatedCashVariance) === 0 ? "GH\u20B5 0" : <> {Number(account.calculatedCashVariance) > 0 ? "+" : ""}<CediAmount amount={account.calculatedCashVariance} /></>}</span></td>
+                      <td className="text-right font-mono text-sm"><CediAmount amount={account.totalExpenses} /></td>
                       <td><Link href={`/admin/reports/${account.id}`} className="text-sm text-blue-600 hover:text-blue-800">View</Link></td>
                     </tr>
                   ))}

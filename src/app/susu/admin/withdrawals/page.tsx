@@ -6,6 +6,7 @@ import { getWithdrawals, processWithdrawal } from "@/lib/actions/susu-withdrawal
 import { searchCustomers } from "@/lib/actions/susu-customer.actions";
 import { formatCedi, formatDateTime } from "@/lib/utils";
 import ReauthDialog from "@/components/ReauthDialog";
+import CediAmount from "@/components/CediAmount";
 
 interface WithdrawalRecord {
   id: string;
@@ -220,11 +221,11 @@ export default function SusuWithdrawalsPage() {
               <div className="font-medium">{selectedCustomer.fullName}</div>
               <div className="text-sm text-gray-600">
                 Account: {selectedCustomer.accounts[0]?.accountId} &bull; Daily:{" "}
-                {formatCedi(selectedCustomer.accounts[0]?.dailyContribution || 0)}/day
+                <CediAmount amount={selectedCustomer.accounts[0]?.dailyContribution || 0} />/day
               </div>
               <p className="text-xs text-orange-600 mt-1">
                 ⚠️ First withdrawal in a cycle will incur a one-day commission (
-                {formatCedi(selectedCustomer.accounts[0]?.dailyContribution || 0)})
+                <CediAmount amount={selectedCustomer.accounts[0]?.dailyContribution || 0} />)
               </p>
             </div>
           )}
@@ -306,16 +307,16 @@ export default function SusuWithdrawalsPage() {
                         <div className="font-medium text-sm">{w.account.customer.fullName}</div>
                         <div className="text-xs text-gray-500">{w.account.customer.customerId}</div>
                       </td>
-                      <td className="font-mono text-sm">{formatCedi(w.requestedAmount)}</td>
+                      <td className="font-mono text-sm"><CediAmount amount={w.requestedAmount} /></td>
                       <td className="font-mono text-sm">
                         {w.commissionAmount > 0 ? (
-                          <span className="text-orange-600">{formatCedi(w.commissionAmount)}</span>
+                          <span className="text-orange-600"><CediAmount amount={w.commissionAmount} /></span>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="font-mono text-sm font-semibold">{formatCedi(w.netAmount)}</td>
-                      <td className="font-mono text-sm text-blue-600">{formatCedi(w.remainingBalance)}</td>
+                      <td className="font-mono text-sm font-semibold"><CediAmount amount={w.netAmount} /></td>
+                      <td className="font-mono text-sm text-blue-600"><CediAmount amount={w.remainingBalance} /></td>
                       <td>
                         <span className="badge badge-blue">Cycle {w.cycle.cycleNumber}</span>
                       </td>

@@ -240,6 +240,7 @@ export async function getContributions(params?: {
         },
         allocations: true,
         collector: { include: { user: { select: { fullName: true } } } },
+        recordedBy: { select: { fullName: true } },
       },
       orderBy: { collectionDate: "desc" },
       skip,
