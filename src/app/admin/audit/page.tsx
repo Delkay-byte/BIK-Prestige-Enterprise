@@ -36,6 +36,7 @@ function friendlyAction(action: string): string {
     "susu.customer_assigned_to_collector": "Assigned customer to collector",
     "susu.customer_removed_from_collector": "Removed customer from collector",
     "susu.remittance_recorded": "Recorded collector money handed in",
+    "susu.customer_reassigned": "Reassigned customer to a new collector",
     "daily_account.submitted": "Submitted today's MoMo account",
     "daily_account.reviewed": "Reviewed today's MoMo account",
   };

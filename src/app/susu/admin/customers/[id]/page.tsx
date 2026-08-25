@@ -3,7 +3,8 @@ import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getCustomerById } from "@/lib/actions/susu-customer.actions";
+import { getCustomerById, reassignCustomer } from "@/lib/actions/susu-customer.actions";
+import { getCollectors } from "@/lib/actions/susu-collector.actions";
 import { formatCedi, formatDate, formatDateTime } from "@/lib/utils";
 
 interface CustomerDetail {
@@ -50,22 +51,43 @@ interface CustomerDetail {
   }>;
   assignments: Array<{
     id: string;
+    active: boolean;
+    assignedAt: Date;
+    unassignedAt?: Date | null;
     collector: { user: { id: string; fullName: string } };
   }>;
+}
+
+interface Collector {
+  id: string;
+  user: { fullName: string; email: string; status: string };
 }
 
 export default function SusuCustomerDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
+  const [collectors, setCollectors] = useState<Collector[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  // Reassignment modal
+  const [showReassign, setShowReassign] = useState(false);
+  const [newCollectorId, setNewCollectorId] = useState("");
+  const [collectorSearch, setCollectorSearch] = useState("");
+  const [reassigning, setReassigning] = useState(false);
 
   async function loadCustomer() {
     try {
-      const data = await getCustomerById(params.id as string);
-      setCustomer(data as unknown as CustomerDetail);
-    } catch (err) { if (isRedirectError(err)) throw err;
+      const [customerData, collectorData] = await Promise.all([
+        getCustomerById(params.id as string),
+        getCollectors(),
+      ]);
+      setCustomer(customerData as unknown as CustomerDetail);
+      setCollectors(collectorData as unknown as Collector[]);
+    } catch (err) {
+      if (isRedirectError(err)) throw err;
       setError("Failed to load customer");
     } finally {
       setLoading(false);
@@ -75,6 +97,39 @@ export default function SusuCustomerDetailPage() {
   useEffect(() => {
     loadCustomer();
   }, [params.id]);
+
+  async function handleReassign() {
+    if (!newCollectorId || !customer) return;
+    setReassigning(true);
+    setError("");
+    setSuccess("");
+    try {
+      const account = customer.accounts[0];
+      if (!account) {
+        setError("No active account found");
+        return;
+      }
+      const result = await reassignCustomer({
+        customerId: customer.id,
+        accountId: account.id,
+        newCollectorId,
+      });
+      if (result.success) {
+        setSuccess("Customer reassigned successfully");
+        setShowReassign(false);
+        setNewCollectorId("");
+        setCollectorSearch("");
+        loadCustomer();
+      } else {
+        setError(result.error || "Failed to reassign customer");
+      }
+    } catch (err) {
+      if (isRedirectError(err)) throw err;
+      setError("An unexpected error occurred");
+    } finally {
+      setReassigning(false);
+    }
+  }
 
   if (loading)
     return (
@@ -94,6 +149,22 @@ export default function SusuCustomerDetailPage() {
 
   const account = customer.accounts[0];
   const currentCycle = account?.cycles[0];
+  const activeAssignment = customer.assignments.find((a) => a.active);
+  const currentCollector = activeAssignment?.collector?.user?.fullName;
+
+  // Filter collectors for search
+  const filteredCollectors = collectors.filter((c) => {
+    if (c.user.status !== "active") return false;
+    if (!collectorSearch) return true;
+    const q = collectorSearch.toLowerCase();
+    return (
+      c.user.fullName.toLowerCase().includes(q) ||
+      c.user.email.toLowerCase().includes(q)
+    );
+  });
+
+  // Assignment history (inactive assignments + current)
+  const assignmentHistory = customer.assignments;
 
   // Calculate cycle totals
   function getCycleStats(cycle: CustomerDetail["accounts"][0]["cycles"][0]) {
@@ -131,25 +202,65 @@ export default function SusuCustomerDetailPage() {
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
           {error}
+          <button onClick={() => setError("")} className="ml-2">✕</button>
+        </div>
+      )}
+      {success && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4">
+          {success}
+          <button onClick={() => setSuccess("")} className="ml-2">✕</button>
         </div>
       )}
 
-      {/* Account Info */}
-      {account && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="card">
-            <div className="text-sm text-gray-500 mb-1">Account Number</div>
-            <div className="font-mono font-semibold text-lg">{account.accountId}</div>
-          </div>
-          <div className="card">
-            <div className="text-sm text-gray-500 mb-1">Daily Contribution</div>
-            <div className="font-semibold text-lg text-green-700">
-              {formatCedi(account.dailyContribution)}/day
+      {/* Current Collector + Account Info */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="card border-l-4 border-l-blue-500">
+          <div className="text-sm text-gray-500 mb-1">Current Collector</div>
+          {currentCollector ? (
+            <div className="font-semibold text-lg">{currentCollector}</div>
+          ) : (
+            <div className="text-gray-400 italic">No Collector Assigned</div>
+          )}
+          <button
+            onClick={() => setShowReassign(true)}
+            className="btn btn-secondary btn-sm mt-2"
+          >
+            Change Collector
+          </button>
+        </div>
+        {account && (
+          <>
+            <div className="card">
+              <div className="text-sm text-gray-500 mb-1">Account Number</div>
+              <div className="font-mono font-semibold text-lg">{account.accountId}</div>
             </div>
-          </div>
-          <div className="card">
-            <div className="text-sm text-gray-500 mb-1">Card Custody</div>
-            <div className="font-semibold capitalize">{account.cardCustody}</div>
+            <div className="card">
+              <div className="text-sm text-gray-500 mb-1">Daily Contribution</div>
+              <div className="font-semibold text-lg text-green-700">
+                {formatCedi(account.dailyContribution)}/day
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Collector History */}
+      {assignmentHistory.length > 0 && (
+        <div className="card mb-8">
+          <h3 className="font-semibold mb-3">Collector History</h3>
+          <div className="space-y-2">
+            {assignmentHistory.map((a) => (
+              <div key={a.id} className={`flex items-center justify-between p-3 rounded-lg ${a.active ? "bg-green-50 border border-green-200" : "bg-gray-50"}`}>
+                <div>
+                  <div className="font-medium text-sm">{a.collector.user.fullName}</div>
+                  <div className="text-xs text-gray-500">
+                    {formatDate(a.assignedAt)}
+                    {a.unassignedAt ? ` — ${formatDate(a.unassignedAt)}` : " — Current"}
+                  </div>
+                </div>
+                {a.active && <span className="badge badge-green text-xs">Current</span>}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -265,6 +376,94 @@ export default function SusuCustomerDetailPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Reassignment Modal */}
+      {showReassign && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-2">Change Collector</h3>
+
+            <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm">
+              <div className="flex justify-between mb-1">
+                <span className="text-gray-500">Customer:</span>
+                <span className="font-medium">{customer.fullName}</span>
+              </div>
+              <div className="flex justify-between mb-1">
+                <span className="text-gray-500">Customer ID:</span>
+                <span className="font-mono">{customer.customerId}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Current Collector:</span>
+                <span className="font-medium">{currentCollector || "None"}</span>
+              </div>
+            </div>
+
+            <div className="form-group mb-4">
+              <label className="form-label">New Collector</label>
+              <input
+                type="text"
+                placeholder="Search collector by name..."
+                value={collectorSearch}
+                onChange={(e) => setCollectorSearch(e.target.value)}
+                className="w-full"
+              />
+              <div className="mt-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
+                {filteredCollectors.length === 0 ? (
+                  <div className="p-3 text-sm text-gray-500 text-center">No collectors found</div>
+                ) : (
+                  filteredCollectors.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => {
+                        setNewCollectorId(c.id);
+                        setCollectorSearch(c.user.fullName);
+                      }}
+                      className={`w-full text-left p-3 text-sm border-b border-gray-100 last:border-0 hover:bg-green-50 transition-colors ${
+                        newCollectorId === c.id ? "bg-green-50 border-l-2 border-l-green-500" : ""
+                      }`}
+                    >
+                      <div className="font-medium">{c.user.fullName}</div>
+                      <div className="text-xs text-gray-500">{c.user.email}</div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {newCollectorId && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm text-blue-800">
+                <strong>Reassign this customer?</strong>
+                <br />
+                {customer.fullName} will be moved from {currentCollector || "no collector"} to{" "}
+                {filteredCollectors.find((c) => c.id === newCollectorId)?.user?.fullName}.
+                <br />
+                <span className="text-blue-600">Previous collection history will remain unchanged.</span>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowReassign(false);
+                  setNewCollectorId("");
+                  setCollectorSearch("");
+                }}
+                className="btn btn-secondary flex-1"
+                disabled={reassigning}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReassign}
+                className="btn btn-primary flex-1"
+                disabled={!newCollectorId || reassigning}
+              >
+                {reassigning ? "Reassigning..." : "Reassign Customer"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

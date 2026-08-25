@@ -301,12 +301,13 @@ model Collector {
 }
 
 model CollectorCustomerAssignment {
-  id          String   @id @default(cuid())
-  collectorId String
-  customerId  String
-  accountId   String
-  assignedAt  DateTime @default(now())
-  active      Boolean  @default(true)
+  id           String    @id @default(cuid())
+  collectorId  String
+  customerId   String
+  accountId    String
+  assignedAt   DateTime  @default(now())
+  unassignedAt DateTime?
+  active       Boolean   @default(true)
 
   collector   Collector    @relation(fields: [collectorId], references: [id])
   customer    Customer     @relation(fields: [customerId], references: [id])

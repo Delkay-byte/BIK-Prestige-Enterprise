@@ -235,11 +235,101 @@ export async function getCustomerById(id: string) {
         },
       },
       assignments: {
-        where: { active: true },
         include: { collector: { include: { user: { select: { fullName: true, id: true } } } } },
+        orderBy: { assignedAt: "desc" },
       },
     },
   });
+}
+
+export async function reassignCustomer(params: {
+  customerId: string;
+  accountId: string;
+  newCollectorId: string;
+}): Promise<ActionResponse> {
+  const admin = await requireAdmin();
+  const { customerId, accountId, newCollectorId } = params;
+
+  // 1. Verify customer exists
+  const customer = await db.customer.findUnique({ where: { id: customerId } });
+  if (!customer) {
+    return { success: false, error: "Customer not found" };
+  }
+
+  // 2. Verify new collector exists and is active
+  const newCollector = await db.collector.findUnique({
+    where: { id: newCollectorId },
+    include: { user: { select: { fullName: true, status: true } } },
+  });
+  if (!newCollector || newCollector.user.status !== "active") {
+    return { success: false, error: "Selected collector is not available" };
+  }
+
+  // 3. Find current active assignment
+  const currentAssignment = await db.collectorCustomerAssignment.findFirst({
+    where: { customerId, accountId, active: true },
+    include: { collector: { include: { user: { select: { fullName: true } } } } },
+  });
+
+  // 4. Prevent no-op reassignment
+  if (currentAssignment && currentAssignment.collectorId === newCollectorId) {
+    return { success: false, error: "Customer is already assigned to this collector" };
+  }
+
+  const previousCollectorName = currentAssignment?.collector?.user?.fullName || "None";
+
+  // 5. Atomic reassignment
+  await db.$transaction(async (tx) => {
+    // Deactivate old assignment
+    if (currentAssignment) {
+      await tx.collectorCustomerAssignment.update({
+        where: { id: currentAssignment.id },
+        data: { active: false, unassignedAt: new Date() },
+      });
+    }
+
+    // Check if new collector already has an assignment for this account
+    const existingNew = await tx.collectorCustomerAssignment.findUnique({
+      where: { collectorId_accountId: { collectorId: newCollectorId, accountId } },
+    });
+
+    if (existingNew) {
+      // Reactivate existing assignment
+      await tx.collectorCustomerAssignment.update({
+        where: { id: existingNew.id },
+        data: { active: true, unassignedAt: null },
+      });
+    } else {
+      // Create new assignment
+      await tx.collectorCustomerAssignment.create({
+        data: {
+          collectorId: newCollectorId,
+          customerId,
+          accountId,
+          active: true,
+        },
+      });
+    }
+  });
+
+  // 6. Audit
+  await createAuditLog({
+    userId: admin.userId,
+    action: "susu.customer_reassigned",
+    entityType: "customer",
+    entityId: customerId,
+    details: {
+      customerId: customer.customerId,
+      customerName: customer.fullName,
+      previousCollector: previousCollectorName,
+      newCollector: newCollector.user.fullName,
+    },
+  });
+
+  revalidatePath("/susu/admin/customers");
+  revalidatePath(`/susu/admin/customers/${customerId}`);
+  revalidatePath("/susu/admin/collectors");
+  return { success: true };
 }
 
 export async function searchCustomers(query: string) {
