@@ -146,6 +146,7 @@ model Customer {
   portalEnabled     Boolean   @default(false)
   portalPasswordHash String?
   forcePortalPasswordReset Boolean @default(false)
+  tokenVersion       Int      @default(0)     // Bumped to invalidate existing customer sessions
 
   accounts          SusuAccount[]
   assignments       CollectorCustomerAssignment[]
@@ -211,7 +212,8 @@ model Contribution {
   channel         String                // collector | direct_office
   collectorId     String?               // Reference to Collector if collected via collector
   recordedById    String                // User who recorded the payment
-  receivedById    String?               // Staff who physically received the payment (office channel)
+  receivedById    String?               // Staff (User) who recorded/authorised the office payment (audit)
+  receivedByName  String?               // Free-text name of the staff who physically received the money
   referenceId     String   @unique      // Idempotency key - prevents duplicate submissions
   notes           String?
   createdAt       DateTime @default(now())

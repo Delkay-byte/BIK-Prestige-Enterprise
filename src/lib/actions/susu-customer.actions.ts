@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { requireAuth, requireAdmin, requireCustomer, hashPassword } from "@/lib/auth";
 import { createAuditLog } from "@/lib/audit";
+import { normalizeGhanaPhone } from "@/lib/utils";
 import { revalidatePath } from "next/cache";
 
 export interface ActionResponse {
@@ -343,6 +344,7 @@ export async function searchCustomers(query: string) {
   // For SQLite, contains() is case-sensitive. We fetch more results
   // and filter in-memory for case-insensitive matching.
   const normalizedQuery = query.trim().toLowerCase();
+  const phoneCandidates = normalizeGhanaPhone(query);
 
   // Fetch candidates with a broader match (lowercase the query for SQLite LIKE)
   const candidates = await db.customer.findMany({
@@ -354,6 +356,8 @@ export async function searchCustomers(query: string) {
         // Also try uppercase variant for SQLite case sensitivity
         { fullName: { contains: normalizedQuery.toUpperCase() } },
         { customerId: { contains: normalizedQuery.toUpperCase() } },
+        // Match phone in any canonical Ghanaian form (024... / +233...)
+        ...(phoneCandidates.length ? [{ phone: { in: phoneCandidates } }] : []),
       ],
       status: "active",
     },
@@ -575,7 +579,7 @@ export async function getCustomerStatement() {
       amount: Number(c.amount),
       balance: runningBalance,
        channel: c.channel,
-       receivedBy: c.receivedBy?.fullName,
+       receivedBy: (c as { receivedByName?: string | null }).receivedByName ?? c.receivedBy?.fullName,
        cycleNumber: c.cycle.cycleNumber,
     });
   });
@@ -735,6 +739,7 @@ export async function resetCustomerPassword(
     data: {
       portalPasswordHash: passwordHash,
       forcePortalPasswordReset: true,
+      tokenVersion: { increment: 1 },
     },
   });
 

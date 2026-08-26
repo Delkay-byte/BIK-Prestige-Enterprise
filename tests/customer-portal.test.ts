@@ -169,6 +169,41 @@ describe("Office payment accountability", () => {
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/staff/i);
   });
+
+  it("stores the free-text Received By name entered at the office", async () => {
+    const account = await activeAccount(custAId);
+    const result = await recordContribution({
+      accountId: account.id,
+      amount: 50,
+      channel: "direct_office",
+      receivedByName: "Kwame Osei",
+    });
+    expect(result.success).toBe(true);
+
+    const stored = await prisma.contribution.findUniqueOrThrow({
+      where: { id: (result.data as any).contributionId },
+    });
+    expect(stored.receivedByName).toBe("Kwame Osei");
+    // System still records the internal recorder for audit
+    expect(stored.recordedById).toBe(adminId);
+  });
+
+  it("customer statement shows the typed Received By name, not the recorder", async () => {
+    customerSessionId = custAId;
+    const account = await activeAccount(custAId);
+    await recordContribution({
+      accountId: account.id,
+      amount: 50,
+      channel: "direct_office",
+      receivedByName: "Kwame Osei",
+    });
+
+    const entries = (await customerActions.getCustomerStatement()) as any[];
+    const contribution = entries.find((e) => e.type === "contribution");
+    expect(contribution).toBeTruthy();
+    expect(contribution.receivedBy).toBe("Kwame Osei");
+    expect(contribution.receivedBy).not.toBe("Admin User");
+  });
 });
 
 describe("Customer data isolation", () => {

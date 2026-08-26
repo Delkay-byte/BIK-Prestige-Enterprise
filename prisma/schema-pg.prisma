@@ -34,6 +34,7 @@ model User {
   passwordResetTokens  PasswordResetToken[]
   devices              DeviceEnrollment[]
   recordedContributions Contribution[]        @relation("RecordedContributions")
+  receivedContributions Contribution[]        @relation("ReceivedContributions")
 
   @@index([role])
   @@index([status])
@@ -130,22 +131,30 @@ model AuditLog {
 // =====================
 
 model Customer {
-  id           String   @id @default(cuid())
-  customerId   String   @unique // BIK-S-XXXXXX format, human-readable
-  fullName     String
-  phone        String?
-  address      String?
-  status       String   @default("active") // active | inactive
-  registeredAt DateTime @default(now())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                String    @id @default(cuid())
+  customerId        String    @unique // BIK-C-XXXXXX format, human-readable
+  fullName          String
+  phone             String?
+  email             String?   @unique
+  address           String?
+  status            String    @default("active") // active | inactive
+  registeredAt      DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  accounts     SusuAccount[]
-  assignments  CollectorCustomerAssignment[]
+  // Customer Portal
+  portalEnabled     Boolean   @default(false)
+  portalPasswordHash String?
+  forcePortalPasswordReset Boolean @default(false)
+  tokenVersion       Int      @default(0)     // Bumped to invalidate existing customer sessions
+
+  accounts          SusuAccount[]
+  assignments       CollectorCustomerAssignment[]
 
   @@index([status])
   @@index([customerId])
   @@index([phone])
+  @@index([email])
 }
 
 model SusuAccount {
@@ -203,6 +212,8 @@ model Contribution {
   channel         String                // collector | direct_office
   collectorId     String?               // Reference to Collector if collected via collector
   recordedById    String                // User who recorded the payment
+  receivedById    String?               // Staff (User) who recorded/authorised the office payment (audit)
+  receivedByName  String?               // Free-text name of the staff who physically received the money
   referenceId     String   @unique      // Idempotency key - prevents duplicate submissions
   notes           String?
   createdAt       DateTime @default(now())
@@ -211,6 +222,7 @@ model Contribution {
   cycle       SusuCycle              @relation(fields: [cycleId], references: [id])
   collector   Collector?             @relation(fields: [collectorId], references: [id])
   recordedBy  User                   @relation("RecordedContributions", fields: [recordedById], references: [id])
+  receivedBy  User?                  @relation("ReceivedContributions", fields: [receivedById], references: [id])
   allocations ContributionAllocation[]
 
   @@index([accountId])
@@ -218,6 +230,7 @@ model Contribution {
   @@index([collectionDate])
   @@index([channel])
   @@index([collectorId])
+  @@index([receivedById])
   @@index([referenceId])
 }
 

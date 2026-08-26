@@ -19,6 +19,7 @@ interface CustomerDetail {
   registeredAt: Date;
   portalEnabled: boolean;
   portalPasswordHash?: string | null;
+  forcePortalPasswordReset?: boolean;
   accounts: Array<{
     id: string;
     accountId: string;
@@ -311,7 +312,7 @@ export default function SusuCustomerDetailPage() {
           type: "contribution",
           amount: Number(c.amount),
           channel: c.channel,
-          receivedBy: c.recordedBy?.fullName,
+          receivedBy: (c as { receivedByName?: string | null }).receivedByName ?? c.receivedBy?.fullName,
           cycleNumber: cycle.cycleNumber,
         });
       });
@@ -581,12 +582,14 @@ export default function SusuCustomerDetailPage() {
       <div className="card mb-8">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-lg">Customer Portal Access</h3>
-          {customer.portalEnabled ? (
+          {!customer.portalPasswordHash ? (
+            <span className="badge badge-gray">Not Created</span>
+          ) : customer.portalEnabled && customer.forcePortalPasswordReset ? (
+            <span className="badge badge-yellow">Password Change Required</span>
+          ) : customer.portalEnabled ? (
             <span className="badge badge-green">Active</span>
-          ) : customer.portalPasswordHash ? (
-            <span className="badge badge-yellow">Disabled</span>
           ) : (
-            <span className="badge badge-gray">Not Enabled</span>
+            <span className="badge badge-yellow">Disabled</span>
           )}
         </div>
 
@@ -807,8 +810,8 @@ export default function SusuCustomerDetailPage() {
                             <span>{formatDate(c.collectionDate)}</span>
                             <span className="text-gray-400 ml-2">
                               ({c.channel === "collector" ? "Collector" : "Office"})
-                              {c.channel === "direct_office" && c.receivedBy?.fullName
-                                ? ` — Received by ${c.receivedBy.fullName}`
+                              {c.channel === "direct_office" && ((c as { receivedByName?: string | null }).receivedByName || c.receivedBy?.fullName)
+                                ? ` — Received by ${(c as { receivedByName?: string | null }).receivedByName || c.receivedBy?.fullName}`
                                 : c.channel === "collector" && c.collector?.user?.fullName
                                 ? ` — Collected by ${c.collector.user.fullName}`
                                 : ""}

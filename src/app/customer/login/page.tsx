@@ -60,12 +60,12 @@ export default function CustomerLoginPage() {
           )}
           <form action={handleSubmit}>
             <div className="form-group">
-              <label className="form-label" htmlFor="identifier">Customer ID / Phone / Email</label>
+              <label className="form-label" htmlFor="identifier">Customer ID, Phone or Email</label>
               <input
                 type="text"
                 id="identifier"
                 name="identifier"
-                placeholder="Enter your Customer ID, phone, or email"
+                placeholder="Enter your Customer ID, phone number or email"
                 required
                 autoComplete="username"
               />

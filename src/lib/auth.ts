@@ -342,15 +342,28 @@ export async function getSelectionUser(): Promise<SelectionPayload | null> {
 /** True when the stored session matches the user's current tokenVersion. */
 export async function isSessionCurrent(payload: JwtPayload): Promise<boolean> {
   try {
+    // Server-side timing enforcement applies to every role.
+    const timingStatus = validateSessionTiming(payload);
+    if (timingStatus !== "valid") return false;
+
+    // Customer sessions are validated against the Customer record, not User.
+    if (payload.role === "customer") {
+      const customer = await db.customer.findUnique({
+        where: { id: payload.userId },
+        select: { status: true, tokenVersion: true },
+      });
+      if (!customer || customer.status !== "active") return false;
+      if ((customer.tokenVersion ?? 0) !== (payload.tokenVersion ?? 0)) return false;
+      return true;
+    }
+
     const user = await db.user.findUnique({
       where: { id: payload.userId },
       select: { tokenVersion: true, status: true },
     });
     if (!user || user.status !== "active") return false;
     if (user.tokenVersion !== (payload.tokenVersion ?? 0)) return false;
-    // Server-side timing enforcement
-    const timingStatus = validateSessionTiming(payload);
-    return timingStatus === "valid";
+    return true;
   } catch {
     return false;
   }

@@ -2,10 +2,8 @@
 import { getContributions, recordContribution } from "@/lib/actions/susu-contribution.actions";
 import { searchCustomers } from "@/lib/actions/susu-customer.actions";
 import { getCollectors } from "@/lib/actions/susu-collector.actions";
-import { searchStaff } from "@/lib/actions/worker.actions";
 import { formatCedi, formatDate, formatDateTime } from "@/lib/utils";
 import CediAmount from "@/components/CediAmount";
-import SmartSearch from "@/components/SmartSearch";
 import { useEffect, useState } from "react";
 import { isRedirectError } from "@/lib/errors";
 
@@ -23,6 +21,7 @@ interface Contribution {
   collector?: { user: { fullName: string } } | null;
   recordedBy?: { fullName: string } | null;
   receivedBy?: { fullName: string } | null;
+  receivedByName?: string | null;
 }
 
 interface CustomerSearchResult {
@@ -63,9 +62,9 @@ export default function SusuContributionsPage() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ id: string; fullName: string } | null>(null);
-  const [selectedReceivedBy, setSelectedReceivedBy] = useState<{ id: string; label: string } | null>(null);
+  const [receivedByName, setReceivedByName] = useState("");
 
-  // Load current user for "Recorded By" field and default "Received By"
+  // Load current user for "Recorded By" field
   useEffect(() => {
     async function loadCurrentUser() {
       try {
@@ -75,8 +74,6 @@ export default function SusuContributionsPage() {
           if (authUser?.userId) {
             const fullName = authUser.fullName || "Current User";
             setCurrentUser({ id: authUser.userId, fullName });
-            // Default Received By to the current user
-            setSelectedReceivedBy({ id: authUser.userId, label: fullName });
           }
         }
       } catch {
@@ -148,6 +145,12 @@ export default function SusuContributionsPage() {
       return;
     }
 
+    const receivedByText = receivedByName.trim();
+    if (channel === "direct_office" && !receivedByText) {
+      setError("Please enter the name of the staff who received this payment.");
+      return;
+    }
+
     setSubmitting(true);
     setError("");
     setSuccess("");
@@ -158,16 +161,14 @@ export default function SusuContributionsPage() {
         amount: amountNum,
         channel,
         collectorId: channel === "collector" ? selectedCollector : undefined,
-        receivedById: channel === "direct_office" ? (selectedReceivedBy?.id || currentUser?.id) : undefined,
+        receivedByName: channel === "direct_office" ? receivedByText : undefined,
         notes: notes || undefined,
       });
 
       if (result.success) {
-        const data = result.data as { daysAllocated: number; allocatedAmount: number };
-        const receivedByName = selectedReceivedBy?.label || currentUser?.fullName || "";
         setSuccess(
           channel === "direct_office"
-            ? `${formatCedi(amountNum)} recorded.\nReceived by ${receivedByName}.`
+            ? `${formatCedi(amountNum)} recorded.\nReceived by ${receivedByText}.`
             : `${formatCedi(amountNum)} recorded.\nCollected by ${collectors.find((c) => c.id === selectedCollector)?.user?.fullName || ""}.`
         );
         setShowForm(false);
@@ -175,7 +176,7 @@ export default function SusuContributionsPage() {
         setSearchQuery("");
         setAmount("");
         setNotes("");
-        setSelectedReceivedBy(null);
+        setReceivedByName("");
         loadContributions();
       } else {
         setError(result.error || "Failed to record contribution");
@@ -210,7 +211,7 @@ export default function SusuContributionsPage() {
       c.channel === "collector" ? "Collector" : "Office",
       c.channel === "collector"
         ? c.collector?.user?.fullName || "—"
-        : c.receivedBy?.fullName || "—",
+        : c.receivedByName || c.receivedBy?.fullName || "—",
       c.notes || "",
     ]);
     const csv = [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
@@ -348,22 +349,15 @@ export default function SusuContributionsPage() {
               <>
                 <div className="form-group">
                   <label className="form-label">Received By *</label>
-                  <SmartSearch
-                    label=""
-                    placeholder="Search staff by name..."
-                    searchFn={async (q) => {
-                      const results = await searchStaff(q);
-                      return results.map((s) => ({
-                        id: s.id,
-                        label: s.fullName,
-                        subLabel: `${s.role} • ${s.email}`,
-                      }));
-                    }}
-                    onSelect={(option) => setSelectedReceivedBy(option)}
-                    selectedOption={selectedReceivedBy}
-                    minQueryLength={1}
+                  <input
+                    type="text"
+                    placeholder="Type the name of the staff who received this payment"
+                    value={receivedByName}
+                    onChange={(e) => setReceivedByName(e.target.value)}
                   />
-                  <p className="form-hint text-xs mt-1">Select the staff member who physically received the money.</p>
+                  <p className="form-hint text-xs mt-1">
+                    Enter the name of the person who physically received the money at the office.
+                  </p>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Recorded By</label>
@@ -468,9 +462,9 @@ export default function SusuContributionsPage() {
                         </span>
                       </td>
                       <td className="text-sm">
-                        {c.channel === "collector"
-                          ? `Collected by ${c.collector?.user?.fullName || "—"}`
-                          : `Received by ${c.receivedBy?.fullName || "—"}${c.recordedBy?.fullName ? ` (recorded by ${c.recordedBy.fullName})` : ""}`}
+                      {c.channel === "collector"
+                        ? `Collected by ${c.collector?.user?.fullName || "—"}`
+                        : `Received by ${c.receivedByName || c.receivedBy?.fullName || "—"}${c.recordedBy?.fullName ? ` (recorded by ${c.recordedBy.fullName})` : ""}`}
                       </td>
                     </tr>
                   ))}

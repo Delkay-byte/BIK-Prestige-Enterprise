@@ -21,6 +21,7 @@ import {
 } from "@/lib/auth";
 import { loginSchema } from "@/lib/validations";
 import { createAuditLog } from "@/lib/audit";
+import { normalizeGhanaPhone } from "@/lib/utils";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -391,8 +392,12 @@ export async function customerLogin(
   const identifier = (formData.get("identifier") as string)?.trim();
   const password = formData.get("password") as string;
 
+  // Generic response — never reveal whether the identifier exists, is disabled,
+  // or the password was merely incorrect (login enumeration protection).
+  const GENERIC_AUTH_ERROR = "Invalid Customer ID, phone, email or password.";
+
   if (!identifier || !password) {
-    return { success: false, error: "Customer ID/Phone/Email and password are required" };
+    return { success: false, error: "Customer ID, phone or email and password are required" };
   }
 
   // Rate limiting: 5 attempts per 15 minutes per identifier
@@ -404,36 +409,33 @@ export async function customerLogin(
     };
   }
 
-  // Try to find customer by customerId, phone, or email
+  // Normalize Ghanaian phone formats so 024... and +233... match the same record.
+  const phoneCandidates = normalizeGhanaPhone(identifier);
+
+  // Try to find customer by customerId, phone (any canonical form), or email.
   const customer = await db.customer.findFirst({
     where: {
+      portalEnabled: true,
       OR: [
         { customerId: identifier },
+        { email: identifier.toLowerCase() },
         { phone: identifier },
-        { email: identifier },
+        ...(phoneCandidates.length ? [{ phone: { in: phoneCandidates } }] : []),
       ],
-      portalEnabled: true,
     },
   });
 
-  if (!customer) {
-    return { success: false, error: "Invalid credentials or portal not enabled" };
-  }
-
-  if (customer.status !== "active") {
-    return { success: false, error: "Your account is inactive. Please contact support." };
-  }
-
-  if (!customer.portalPasswordHash) {
-    return { success: false, error: "Portal access not configured. Please contact administrator." };
+  if (!customer || customer.status !== "active" || !customer.portalPasswordHash) {
+    return { success: false, error: GENERIC_AUTH_ERROR };
   }
 
   const valid = await verifyPassword(password, customer.portalPasswordHash);
   if (!valid) {
-    return { success: false, error: "Invalid credentials" };
+    return { success: false, error: GENERIC_AUTH_ERROR };
   }
 
-  // Create customer session payload
+  // Create customer session payload. tokenVersion is taken from the customer
+  // record so admin resets (which bump it) invalidate prior sessions.
   const payload: JwtPayload = {
     userId: customer.id,
     email: customer.email || `${customer.customerId}@bik-prestige.local`,
@@ -441,7 +443,7 @@ export async function customerLogin(
     role: "customer",
     modules: ["customer"],
     forcePasswordReset: customer.forcePortalPasswordReset ?? false,
-    tokenVersion: 0,
+    tokenVersion: customer.tokenVersion ?? 0,
   };
 
   await setModuleSession("customer", payload);
@@ -505,11 +507,17 @@ export async function customerChangePassword(
     data: {
       portalPasswordHash: newHash,
       forcePortalPasswordReset: false,
+      tokenVersion: { increment: 1 },
     },
   });
 
-  // Re-issue customer session
-  const refreshed = { ...session, forcePasswordReset: false };
+  // Re-issue customer session with the new tokenVersion so the temporary
+  // password session is fully replaced and other sessions are invalidated.
+  const refreshed = {
+    ...session,
+    forcePasswordReset: false,
+    tokenVersion: (session.tokenVersion ?? 0) + 1,
+  };
   await setModuleSession("customer", refreshed);
 
   await createAuditLog({

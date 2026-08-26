@@ -116,6 +116,36 @@ export function getDailyQuote(module: "momo" | "susu" | "admin" = "momo"): strin
   return pool[dayOfYear % pool.length];
 }
 
+// ── Phone normalization (Ghana) ─────────────────────────────────────────────
+/**
+ * Normalize Ghanaian phone numbers to their canonical stored forms so that
+ * e.g. `0241234567` and `+233241234567` resolve to the same registered number.
+ * Returns the set of equivalent representations to match against.
+ */
+export function normalizeGhanaPhone(input: string): string[] {
+  if (!input) return [];
+  const digits = input.replace(/[^\d]/g, "");
+  if (digits.length === 0) return [];
+
+  const candidates = new Set<string>();
+  const addLocalAndIntl = (nine: string) => {
+    candidates.add(`0${nine}`);
+    candidates.add(`233${nine}`);
+    candidates.add(`+233${nine}`);
+  };
+
+  if (digits.startsWith("0") && digits.length === 10) {
+    addLocalAndIntl(digits.slice(1));
+  } else if (digits.startsWith("233") && digits.length === 12) {
+    addLocalAndIntl(digits.slice(3));
+  } else if (digits.length === 9) {
+    addLocalAndIntl(digits);
+  } else {
+    candidates.add(digits);
+  }
+  return Array.from(candidates);
+}
+
 // Status badge color classes
 export function getStatusColor(status: string): string {
   switch (status) {

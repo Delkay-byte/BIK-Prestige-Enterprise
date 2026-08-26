@@ -30,7 +30,8 @@ export async function recordContribution(params: {
   amount: number;
   channel: "collector" | "direct_office";
   collectorId?: string; // Admin-only: manually selected collector. Ignored for collector role.
-  receivedById?: string; // Admin-only for direct_office: staff who received the money
+  receivedById?: string; // Admin-only for direct_office: staff (User) who received the money
+  receivedByName?: string; // Free-text name of the staff who physically received the money (office)
   notes?: string;
 }): Promise<ActionResponse> {
   const { accountId, amount, channel, collectorId, receivedById, notes } = params;
@@ -150,6 +151,7 @@ export async function recordContribution(params: {
         collectorId: effectiveCollectorId,
         recordedById: user.userId,
         receivedById: effectiveReceivedById,
+        receivedByName: params.receivedByName?.trim() || null,
         referenceId,
         notes,
       },
