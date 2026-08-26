@@ -36,7 +36,7 @@ export default function AdminLoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-800 via-slate-900 to-emerald-900 px-4 py-10">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-100 via-emerald-50 to-amber-50 px-4 py-10">
       <div className="w-full max-w-md">
         <div className="text-center mb-7">
           <img
@@ -46,7 +46,7 @@ export default function AdminLoginForm() {
             width={224}
             height={112}
           />
-          <p className="text-emerald-200/80 mt-2 text-sm">Administrator Sign In</p>
+          <p className="text-emerald-700 mt-2 text-sm font-medium">Administrator Sign In</p>
         </div>
 
         <div className="card bg-white">
@@ -111,7 +111,7 @@ export default function AdminLoginForm() {
           </div>
         </div>
 
-        <p className="text-center text-xs text-emerald-200/60 mt-8">
+        <p className="text-center text-xs text-gray-400 mt-8">
           Built by BloomCore Technologies
         </p>
       </div>
