@@ -233,3 +233,45 @@ describe("Customer data isolation", () => {
     expect(contribution.receivedBy).not.toBe("Admin User");
   });
 });
+
+describe("Create customer with temporary password", () => {
+  it("enables portal access when a temporary password is supplied at creation", async () => {
+    const fd = new FormData();
+    fd.set("fullName", "New Portal Customer");
+    fd.set("phone", "+233241111111");
+    fd.set("dailyContribution", "50");
+    fd.set("temporaryPassword", "TempPass123");
+
+    const result = await customerActions.createCustomer(fd);
+    expect(result.success).toBe(true);
+    expect((result.data as any).portalEnabled).toBe(true);
+
+    const created = await prisma.customer.findFirstOrThrow({ where: { fullName: "New Portal Customer" } });
+    expect(created.portalEnabled).toBe(true);
+    expect(created.forcePortalPasswordReset).toBe(true);
+    expect(created.portalPasswordHash).toBeTruthy();
+    expect(created.portalPasswordHash).not.toBe("TempPass123"); // stored hashed, never plaintext
+  });
+
+  it("does not enable portal access when no password is supplied", async () => {
+    const fd = new FormData();
+    fd.set("fullName", "No Portal Customer");
+    fd.set("dailyContribution", "50");
+    const result = await customerActions.createCustomer(fd);
+    expect(result.success).toBe(true);
+
+    const created = await prisma.customer.findFirstOrThrow({ where: { fullName: "No Portal Customer" } });
+    expect(created.portalEnabled).toBe(false);
+    expect(created.portalPasswordHash).toBeNull();
+  });
+
+  it("rejects a too-short temporary password", async () => {
+    const fd = new FormData();
+    fd.set("fullName", "Bad Pass Customer");
+    fd.set("dailyContribution", "50");
+    fd.set("temporaryPassword", "short");
+    const result = await customerActions.createCustomer(fd);
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/8 characters/i);
+  });
+});

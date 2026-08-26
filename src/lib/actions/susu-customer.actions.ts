@@ -30,12 +30,16 @@ export async function createCustomer(formData: FormData): Promise<ActionResponse
   const address = (formData.get("address") as string)?.trim() || undefined;
   const dailyContribution = parseFloat(formData.get("dailyContribution") as string);
   const cardFee = parseFloat(formData.get("cardFee") as string) || 10;
+  const temporaryPassword = (formData.get("temporaryPassword") as string)?.trim() || undefined;
 
   if (!fullName || fullName.length < 2) {
     return { success: false, error: "Full name must be at least 2 characters" };
   }
   if (!dailyContribution || dailyContribution <= 0) {
     return { success: false, error: "Daily contribution must be greater than 0" };
+  }
+  if (temporaryPassword && temporaryPassword.length < 8) {
+    return { success: false, error: "Temporary password must be at least 8 characters" };
   }
 
   // Generate IDs
@@ -90,6 +94,28 @@ export async function createCustomer(formData: FormData): Promise<ActionResponse
     },
   });
 
+  // Optional: enable portal access with a temporary password at creation time
+  let portalCreated = false;
+  if (temporaryPassword) {
+    const portalPasswordHash = await hashPassword(temporaryPassword);
+    await db.customer.update({
+      where: { id: customer.id },
+      data: {
+        portalEnabled: true,
+        portalPasswordHash,
+        forcePortalPasswordReset: true,
+      },
+    });
+    portalCreated = true;
+    await createAuditLog({
+      userId: admin.userId,
+      action: "susu.customer_portal_created",
+      entityType: "customer",
+      entityId: customer.id,
+      details: { customerId, method: "create_customer", forcePasswordReset: true },
+    });
+  }
+
   await createAuditLog({
     userId: admin.userId,
     action: "susu.customer_created",
@@ -99,7 +125,7 @@ export async function createCustomer(formData: FormData): Promise<ActionResponse
   });
 
   revalidatePath("/susu/admin/customers");
-  return { success: true, data: { customer, susuAccount } };
+  return { success: true, data: { customer, susuAccount, portalEnabled: portalCreated } };
 }
 
 export async function updateCustomer(customerId: string, formData: FormData): Promise<ActionResponse> {

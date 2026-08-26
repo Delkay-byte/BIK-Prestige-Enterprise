@@ -10,6 +10,7 @@ import {
 import { getCollectors, assignCustomerToCollector } from "@/lib/actions/susu-collector.actions";
 import { formatDate } from "@/lib/utils";
 import CediAmount from "@/components/CediAmount";
+import PasswordInput from "@/components/PasswordInput";
 import Link from "next/link";
 
 interface Customer {
@@ -47,6 +48,8 @@ export default function SusuCustomersPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [submitting, setSubmitting] = useState(false);
+  const [enablePortal, setEnablePortal] = useState(false);
+  const [portalPassword, setPortalPassword] = useState("");
 
   // Assignment modal state
   const [assignModal, setAssignModal] = useState<{ open: boolean; customerId: string; accountId: string }>({
@@ -83,8 +86,15 @@ export default function SusuCustomersPage() {
     try {
       const result = await createCustomer(formData);
       if (result.success) {
-        setSuccess("Customer created successfully");
+        const portalEnabled = (result.data as { portalEnabled?: boolean } | undefined)?.portalEnabled;
+        setSuccess(
+          portalEnabled
+            ? "Customer created. Portal access enabled — share the temporary password with the customer privately."
+            : "Customer created successfully"
+        );
         setShowForm(false);
+        setEnablePortal(false);
+        setPortalPassword("");
         loadData();
       } else {
         setError(result.error || "Failed to create customer");
@@ -207,11 +217,52 @@ export default function SusuCustomersPage() {
                 <p className="form-hint">Standard card fee is GH₵10</p>
               </div>
             </div>
+
+            {/* Optional: enable portal access with a temporary password at creation */}
+            <div className="form-group md:col-span-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="enablePortal"
+                  checked={enablePortal}
+                  onChange={(e) => setEnablePortal(e.target.checked)}
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Enable Customer Portal &amp; set a temporary password
+                </span>
+              </label>
+              <p className="form-hint">
+                Optional. The customer can sign in immediately and must change the password on first login.
+              </p>
+            </div>
+
+            {enablePortal && (
+              <div className="form-group md:col-span-2">
+                <label className="form-label">Temporary Password</label>
+                <PasswordInput
+                  name="temporaryPassword"
+                  value={portalPassword}
+                  onChange={(e) => setPortalPassword(e.target.value)}
+                  placeholder="Min 8 characters"
+                  required
+                />
+                <p className="form-hint">Give this password to the customer privately.</p>
+              </div>
+            )}
+
             <div className="flex gap-3 mt-4">
               <button type="submit" className="btn btn-primary" disabled={submitting}>
                 {submitting ? "Creating..." : "Create Customer"}
               </button>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setShowForm(false);
+                  setEnablePortal(false);
+                  setPortalPassword("");
+                }}
+              >
                 Cancel
               </button>
             </div>
