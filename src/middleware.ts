@@ -78,15 +78,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow customer public routes (separate from staff)
+  // Allow customer public routes (separate from staff).
+  // These are public login/recovery pages — never bounce visitors to the staff
+  // login. Authenticated /customer/* data routes remain protected below.
   if (CUSTOMER_PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
-    // Redirect staff who hit customer public routes to their own login
-    const anyStaffSession = await Promise.all(
-      ["admin", "momo", "susu"].map((mod) => readClaims(request.cookies.get(SESSION_COOKIES[mod as keyof typeof SESSION_COOKIES])?.value))
-    );
-    if (anyStaffSession.some(Boolean)) {
-      return redirectTo("/login");
-    }
     return NextResponse.next();
   }
 
