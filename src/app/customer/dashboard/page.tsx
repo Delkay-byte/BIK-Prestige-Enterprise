@@ -222,11 +222,11 @@ export default function CustomerDashboardPage() {
                      <span className="text-gray-400 ml-2">
                        {c.channel === "collector" ? "Paid to Collector" : "Paid at Office"}
                      </span>
-                     <div className="text-xs text-gray-500 mt-0.5">
-                       {c.channel === "collector"
-                         ? `Collected by ${c.collector?.user?.fullName || "—"}`
-                         : `Received by ${c.receivedBy?.fullName || "—"}`}
-                     </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {c.channel === "collector"
+                          ? `Collected by ${c.collector?.user?.fullName || "—"}`
+                          : `Received by ${(c as { receivedByName?: string | null }).receivedByName || c.receivedBy?.fullName || "—"}`}
+                      </div>
                    </div>
                   <span className="font-mono font-semibold text-green-700"><CediAmount amount={c.amount} /></span>
                 </div>

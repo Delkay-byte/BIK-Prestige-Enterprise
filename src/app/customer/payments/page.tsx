@@ -98,7 +98,7 @@ export default function CustomerPaymentsPage() {
                   <td className="text-sm">
                     {p.channel === "collector"
                       ? `Collected by ${p.collector?.user?.fullName || "—"}`
-                      : `Received by ${p.receivedBy?.fullName || "—"}`}
+                      : `Received by ${(p as { receivedByName?: string | null }).receivedByName || p.receivedBy?.fullName || "—"}`}
                   </td>
                   <td className="text-sm text-gray-500">Cycle {p.cycleNumber}</td>
                 </tr>

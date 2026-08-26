@@ -208,6 +208,7 @@ export async function recordContribution(params: {
       channel,
       collectorId: effectiveCollectorId,
       receivedById: effectiveReceivedById,
+      receivedByName: params.receivedByName ?? null,
       daysAllocated: result.daysAllocated,
       allocatedAmount: result.allocatedAmount,
       referenceId,
