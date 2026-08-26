@@ -7,13 +7,14 @@ import { useState, type InputHTMLAttributes } from "react";
  * The toggle is type="button" so it can never submit the surrounding form.
  */
 export default function PasswordInput({
+  className,
   ...props
 }: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
   const [visible, setVisible] = useState(false);
 
   return (
     <div className="relative">
-      <input {...props} type={visible ? "text" : "password"} className="w-full pr-10" />
+      <input {...props} type={visible ? "text" : "password"} className={`w-full pr-10 ${className ?? ""}`} />
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
