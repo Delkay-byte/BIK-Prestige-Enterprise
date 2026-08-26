@@ -41,7 +41,7 @@ export default function CustomerForgotPasswordPage() {
 
           <div className="flex gap-3 mt-6">
             <Link
-              href="/customer/login"
+              href="/login?role=customer"
               className="btn btn-primary flex-1 text-center"
             >
               Back to Sign In

@@ -38,6 +38,31 @@
 
 ---
 
+## Login & Access URLs
+
+The platform uses a **unified non-admin login** plus a **separate admin login**.
+
+| Audience            | URL                        | Notes                                        |
+| ------------------- | -------------------------- | -------------------------------------------- |
+| Everyone (non-admin)| `/login`                   | Shared portal — pick your role on the screen |
+| Customer            | `/login?role=customer`     | Pre-selects the Customer card                |
+| MoMo Agent          | `/login?role=momo`         | Pre-selects the MoMo Agent card              |
+| Susu Collector      | `/login?role=susu`         | Pre-selects the Susu Collector card          |
+| Administrator       | `/admin/login`             | Separate, privileged boundary                |
+
+- The shared `/login` page shows **only** Customer, MoMo Agent and Susu Collector.
+  **Admin is never offered there.**
+- Selecting a role is only a *requested workspace*. The server re-checks the
+  selection against the account's real capabilities; a mismatch is denied
+  (e.g. a customer cannot open the MoMo dashboard, and vice versa).
+- Legacy `/customer/login` still works and redirects to
+  `/login?role=customer` for backwards compatibility.
+- Each role keeps its own independent session cookie
+  (`bik-customer-session`, `bik-worker-session`, `bik-collector-session`,
+  `bik-admin-session`). They are never merged into one unrestricted cookie.
+
+---
+
 ## 1. Start PostgreSQL (Pilot)
 
 ```bash

@@ -29,6 +29,18 @@ import { checkRateLimit } from "@/lib/rate-limit";
 export interface ActionResponse {
   success: boolean;
   error?: string;
+  /** When true, the error relates to an admin attempting the shared login. */
+  adminLogin?: boolean;
+}
+
+/**
+ * The non-admin workspaces that may be requested through the shared `/login`
+ * portal. `admin` is deliberately excluded and handled by `/admin/login`.
+ */
+export type NonAdminRole = "customer" | "momo" | "susu";
+
+function isNonAdminRole(value: string | undefined): value is NonAdminRole {
+  return value === "customer" || value === "momo" || value === "susu";
 }
 
 function dashboardPathFor(module: ModuleName): string {
@@ -386,33 +398,43 @@ export async function changePassword(
   return { success: true };
 }
 
-export async function customerLogin(
-  formData: FormData
-): Promise<ActionResponse | void> {
-  const identifier = (formData.get("identifier") as string)?.trim();
-  const password = formData.get("password") as string;
+// ---------------------------------------------------------------------------
+// Shared credential resolvers
+//
+// These enforce server-side capability checks so that the browser-supplied
+// "requested workspace" (role) can NEVER become proof of access.  The role the
+// user clicks on the login screen is only a *requested* workspace; the server
+// re-verifies it against the account's real capabilities below.
+// ---------------------------------------------------------------------------
 
-  // Generic response — never reveal whether the identifier exists, is disabled,
-  // or the password was merely incorrect (login enumeration protection).
-  const GENERIC_AUTH_ERROR = "Invalid Customer ID, phone, email or password.";
+const CUSTOMER_GENERIC_ERROR = "Invalid Customer ID, phone, email or password.";
+const STAFF_GENERIC_ERROR = "Invalid email, phone or password.";
 
+/**
+ * Resolve a customer (portal) login.
+ * Returns the session payload, or a generic error string that never reveals
+ * whether the identifier exists, is disabled, or the password was wrong.
+ */
+export async function resolveCustomerAuth(
+  identifier: string,
+  password: string
+): Promise<{ payload: JwtPayload } | { error: string }> {
   if (!identifier || !password) {
-    return { success: false, error: "Customer ID, phone or email and password are required" };
+    return { error: "Customer ID, phone or email and password are required" };
   }
 
-  // Rate limiting: 5 attempts per 15 minutes per identifier
+  // Rate limiting: 5 attempts per 15 minutes per identifier.
   const rateLimitResult = checkRateLimit(`customer_login:${identifier.toLowerCase()}`);
   if (!rateLimitResult.allowed) {
     return {
       success: false,
       error: "Too many login attempts. Please try again in 15 minutes.",
-    };
+    } as { error: string };
   }
 
   // Normalize Ghanaian phone formats so 024... and +233... match the same record.
   const phoneCandidates = normalizeGhanaPhone(identifier);
 
-  // Try to find customer by customerId, phone (any canonical form), or email.
   const customer = await db.customer.findFirst({
     where: {
       portalEnabled: true,
@@ -426,16 +448,14 @@ export async function customerLogin(
   });
 
   if (!customer || customer.status !== "active" || !customer.portalPasswordHash) {
-    return { success: false, error: GENERIC_AUTH_ERROR };
+    return { error: CUSTOMER_GENERIC_ERROR };
   }
 
   const valid = await verifyPassword(password, customer.portalPasswordHash);
   if (!valid) {
-    return { success: false, error: GENERIC_AUTH_ERROR };
+    return { error: CUSTOMER_GENERIC_ERROR };
   }
 
-  // Create customer session payload. tokenVersion is taken from the customer
-  // record so admin resets (which bump it) invalidate prior sessions.
   const payload: JwtPayload = {
     userId: customer.id,
     email: customer.email || `${customer.customerId}@bik-prestige.local`,
@@ -446,19 +466,217 @@ export async function customerLogin(
     tokenVersion: customer.tokenVersion ?? 0,
   };
 
-  await setModuleSession("customer", payload);
+  return { payload };
+}
 
-  await createAuditLog({
-    userId: customer.id,
-    action: "auth.customer_login",
-    entityType: "customer",
-    entityId: customer.id,
+/**
+ * Resolve a staff (MoMo worker / Susu collector) login for a specific module.
+ *
+ * CRITICAL: the requested `module` is just the workspace the user asked for on
+ * the login screen.  The server re-checks it against the account's actual
+ * capabilities.  If the account lacks the capability (or is an admin, or does
+ * not exist), the request is denied with a generic error — no session is
+ * created and the wrong workspace is never opened.
+ */
+export async function resolveStaffAuth(
+  identifier: string,
+  password: string,
+  module: "momo" | "susu"
+): Promise<{ payload: JwtPayload } | { error: string }> {
+  if (!identifier || !password) {
+    return { error: "Email or phone and password are required" };
+  }
+
+  // Rate limiting: 5 attempts per 15 minutes per identifier.
+  const rateLimitResult = checkRateLimit(`login:${identifier.toLowerCase()}`);
+  if (!rateLimitResult.allowed) {
+    return {
+      success: false,
+      error: "Too many login attempts for this account. Please try again in 15 minutes.",
+    } as { error: string };
+  }
+
+  const phoneCandidates = normalizeGhanaPhone(identifier);
+  const user = await db.user.findFirst({
+    where: {
+      OR: [
+        { email: identifier.toLowerCase() },
+        ...(phoneCandidates.length ? [{ phone: { in: phoneCandidates } }] : []),
+      ],
+    },
   });
 
-  if (payload.forcePasswordReset) {
+  if (!user) {
+    return { error: STAFF_GENERIC_ERROR };
+  }
+
+  if (user.status === "inactive") {
+    return {
+      success: false,
+      error: "Your account has been deactivated. Please contact the administrator.",
+    } as { error: string };
+  }
+
+  // Admins must use the dedicated administrator login. Never grant an admin
+  // session through the shared portal.
+  if (user.role === "admin") {
+    return { error: STAFF_GENERIC_ERROR };
+  }
+
+  // Server-side capability check — the requested workspace must be in the
+  // account's real capabilities.
+  const hasCapability = module === "momo" ? user.momoEnabled : user.susuEnabled;
+  if (!hasCapability) {
+    return { error: STAFF_GENERIC_ERROR };
+  }
+
+  const valid = await verifyPassword(password, user.passwordHash);
+  if (!valid) {
+    return { error: STAFF_GENERIC_ERROR };
+  }
+
+  const payload: JwtPayload = {
+    userId: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    role: module === "momo" ? "worker" : "collector",
+    modules: [module],
+    locationId: user.locationId ?? undefined,
+    forcePasswordReset: user.forcePasswordReset,
+    tokenVersion: user.tokenVersion,
+  };
+
+  return { payload };
+}
+
+function auditWorkspace(module: "momo" | "susu" | "customer" | "admin", userId: string) {
+  return createAuditLog({
+    userId,
+    action: module === "customer" ? "auth.customer_login" : "auth.login",
+    entityType: module === "customer" ? "customer" : "user",
+    entityId: userId,
+    details: { module },
+  });
+}
+
+export async function customerLogin(
+  formData: FormData
+): Promise<ActionResponse | void> {
+  const identifier = (formData.get("identifier") as string)?.trim();
+  const password = formData.get("password") as string;
+
+  const result = await resolveCustomerAuth(identifier ?? "", password ?? "");
+  if ("error" in result) return { success: false, error: result.error };
+
+  await setModuleSession("customer", result.payload);
+  await auditWorkspace("customer", result.payload.userId);
+
+  if (result.payload.forcePasswordReset) {
     redirect("/customer/settings?tab=password");
   }
   redirect("/customer/dashboard");
+}
+
+/**
+ * Unified NON-ADMIN login used by the shared `/login` portal.
+ *
+ * The `role` field is the workspace the user selected on the screen.  It is
+ * treated ONLY as a requested workspace and is re-validated server-side:
+ *
+ *   - customer → authenticate against the Customer portal
+ *   - momo     → authenticate a staff account with MoMo capability
+ *   - susu     → authenticate a staff account with Susu capability
+ *   - admin    → rejected; the user must use `/admin/login`
+ *
+ * An account can never open a workspace it is not authorized for.
+ */
+export async function unifiedLogin(
+  formData: FormData
+): Promise<ActionResponse | void> {
+  const role = (formData.get("role") as string)?.trim();
+  const identifier = (formData.get("identifier") as string)?.trim();
+  const password = formData.get("password") as string;
+
+  // The shared portal never processes the admin role.
+  if (role === "admin" || !isNonAdminRole(role)) {
+    return {
+      success: false,
+      error: "Please use the administrator login.",
+      adminLogin: true,
+    };
+  }
+
+  if (role === "customer") {
+    const result = await resolveCustomerAuth(identifier ?? "", password ?? "");
+    if ("error" in result) return { success: false, error: result.error };
+
+    await setModuleSession("customer", result.payload);
+    await auditWorkspace("customer", result.payload.userId);
+
+    if (result.payload.forcePasswordReset) {
+      redirect("/customer/settings?tab=password");
+    }
+    redirect("/customer/dashboard");
+  }
+
+  // momo | susu — server re-validates the requested workspace capability.
+  const mod = role as "momo" | "susu";
+  const result = await resolveStaffAuth(identifier ?? "", password ?? "", mod);
+  if ("error" in result) return { success: false, error: result.error };
+
+  await setModuleSession(mod, result.payload);
+  await auditWorkspace(mod, result.payload.userId);
+
+  if (result.payload.forcePasswordReset) {
+    redirect(`${settingsPathFor(mod)}?tab=password`);
+  }
+  redirect(dashboardPathFor(mod));
+}
+
+/**
+ * Dedicated ADMIN login used by `/admin/login`.
+ *
+ * Only accounts whose primary role is `admin` may authenticate here.  Non-admin
+ * staff credentials are rejected with a generic error and never receive an
+ * admin session.  This keeps the privileged boundary separate from the shared
+ * non-admin portal.
+ */
+export async function adminLogin(
+  formData: FormData
+): Promise<ActionResponse | void> {
+  const email = (formData.get("email") as string)?.trim();
+  const password = formData.get("password") as string;
+
+  if (!email || !password) {
+    return { success: false, error: "Email and password are required" };
+  }
+
+  const rateLimitResult = checkRateLimit(`admin_login:${email.toLowerCase()}`);
+  if (!rateLimitResult.allowed) {
+    return {
+      success: false,
+      error: "Too many login attempts for this account. Please try again in 15 minutes.",
+    };
+  }
+
+  const user = await db.user.findUnique({ where: { email: email.toLowerCase() } });
+  if (!user || user.status === "inactive" || user.role !== "admin") {
+    return { success: false, error: "Invalid email or password" };
+  }
+
+  const valid = await verifyPassword(password, user.passwordHash);
+  if (!valid) {
+    return { success: false, error: "Invalid email or password" };
+  }
+
+  const payload = await buildSessionPayload(user.id);
+  await setModuleSession("admin", payload);
+  await auditWorkspace("admin", user.id);
+
+  if (payload.forcePasswordReset) {
+    redirect("/admin/settings?tab=password");
+  }
+  redirect("/admin/dashboard");
 }
 
 export async function customerChangePassword(
@@ -541,5 +759,5 @@ export async function customerLogout(): Promise<void> {
     });
   }
   await clearModuleSession("customer");
-  redirect("/customer/login");
+  redirect("/login?role=customer");
 }

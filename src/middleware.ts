@@ -36,6 +36,8 @@ const LEGACY_COOKIE = "bik-prestige-token";
 
 const PUBLIC_ROUTES = ["/login", "/forgot-password", "/reset-password", "/api/health", "/api/diag"];
 const CUSTOMER_PUBLIC_ROUTES = ["/customer/login", "/customer/forgot-password"];
+// The dedicated administrator login must be reachable without any session.
+const ADMIN_PUBLIC_ROUTES = ["/admin/login"];
 
 interface TokenClaims {
   role?: string;
@@ -85,6 +87,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow the dedicated administrator login without a session.
+  if (ADMIN_PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
+    return NextResponse.next();
+  }
+
   // Allow static assets and Next.js internals
   if (pathname.startsWith("/_next") || pathname.includes(".")) {
     return NextResponse.next();
@@ -99,10 +106,10 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/customer")) {
     const customerClaims = await readClaims(request.cookies.get(SESSION_COOKIES.customer)?.value);
     if (!customerClaims) {
-      return redirectTo("/customer/login");
+      return redirectTo("/login?role=customer");
     }
     if (customerClaims.role !== "customer") {
-      return redirectTo("/customer/login");
+      return redirectTo("/login?role=customer");
     }
     // First-login mandatory password change for customer
     if (customerClaims.forcePasswordReset) {

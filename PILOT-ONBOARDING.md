@@ -4,12 +4,50 @@
 
 ---
 
+## How Everyone Logs In (Unified Login)
+
+All non-admin users now share **one** login page. You no longer need to remember
+separate role-specific URLs.
+
+- **Canonical login page:** `/login`
+- **Administrator login (separate):** `/admin/login`
+
+### The standard instruction
+
+> **Go to the BIK Prestige login page and select who you are.**
+
+| User type          | Choose on the login screen |
+| ------------------ | -------------------------- |
+| Customer           | 👤 **Customer**            |
+| MoMo Agent         | 💰 **MoMo Agent**          |
+| Susu Collector     | 🧑‍💼 **Susu Collector**    |
+| Administrator      | Use the **separate administrator login** |
+
+1. Open the BIK Prestige login page (`/login`).
+2. Tap/click the card that matches **who you are**.
+3. Enter your credentials in the form that appears.
+4. You will land in your own dashboard.
+
+> The role you select is only a *requested workspace*. The server checks it
+> against your actual account capabilities, so a customer can never open a
+> staff dashboard (and vice versa). If you pick a role you are not authorized
+> for, sign-in is denied.
+
+Legacy shortcuts still work and simply pre-select the role for you:
+`/customer/login` → `/login?role=customer`,
+`/login?role=momo` (MoMo Agent), `/login?role=susu` (Susu Collector).
+
+---
+
 ## For the Admin (Owner)
 
 ### Logging In
-1. Open the application in your browser
+1. Open the **administrator login**: `/admin/login`
 2. Enter your email and password (provided privately)
 3. You will see the **Platform Dashboard**
+
+> The admin login is kept separate from the shared `/login` page for security.
+> Do **not** use the shared page for administrator access.
 
 ### Your Dashboard
 The dashboard shows everything at a glance:
@@ -64,9 +102,10 @@ Click **Sign Out** at the bottom of the sidebar.
 ## For the MoMo Worker
 
 ### Logging In
-1. Open the application in your browser (mobile or desktop)
-2. Enter your email and password
-3. You will see your **Worker Dashboard**
+1. Open the BIK Prestige login page: `/login`
+2. Tap **💰 MoMo Agent**
+3. Enter your email (or phone) and password
+4. You will see your **Worker Dashboard**
 
 ### Your Dashboard
 - You see a greeting and your assigned location name
@@ -120,9 +159,10 @@ Tap the menu (☰) → **Sign Out**
 ## For the Susu Collector
 
 ### Logging In
-1. Open the application on your **phone**
-2. Enter your email and password
-3. You will see your **Collector Dashboard**
+1. Open the BIK Prestige login page on your **phone**: `/login`
+2. Tap **🧑‍💼 Susu Collector**
+3. Enter your email (or phone) and password
+4. You will see your **Collector Dashboard**
 
 ### Your Dashboard
 - **Collected Today:** Total money collected today
@@ -147,6 +187,30 @@ You will see: "All caught up! No outstanding collections for today."
 
 ### Checking Recent Remittances
 Your recent remittances (money you brought to the office) are shown at the bottom of the dashboard.
+
+### Logging Out
+Tap the menu (☰) → **Sign Out**
+
+---
+
+## For the Customer
+
+### Logging In
+1. Open the BIK Prestige login page: `/login`
+2. Tap **👤 Customer**
+3. Enter your **Customer ID, phone or email** and password
+4. You will see your **Customer Dashboard**
+
+> You do **not** need a Gmail or smartphone email to sign in. A **Customer ID +
+> Password** works from any internet-connected device.
+
+### Your Dashboard
+- **Savings:** Your Susu savings balance and account status
+- **Payments:** Office and agent payments made on your behalf
+- **Withdrawals:** Withdrawal requests and history
+- **Statement:** Your full savings statement
+- **Cycle History:** Past and current savings cycles
+- **Profile & Settings:** Update details and change your password
 
 ### Logging Out
 Tap the menu (☰) → **Sign Out**

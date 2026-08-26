@@ -119,7 +119,7 @@ export default function CustomerSettingsPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="card text-center">
           <p className="text-gray-500">Unable to load profile</p>
-          <button onClick={() => router.push("/customer/login")} className="btn btn-primary mt-4">
+          <button onClick={() => router.push("/login?role=customer")} className="btn btn-primary mt-4">
             Sign In
           </button>
         </div>

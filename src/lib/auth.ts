@@ -465,10 +465,10 @@ export async function requireCollector(): Promise<JwtPayload> {
 /** Guard for Customer portal pages/actions: requires an active customer capability. */
 export async function requireCustomer(): Promise<JwtPayload> {
   const user = await getCustomerSession();
-  if (!user) redirect("/customer/login");
+  if (!user) redirect("/login?role=customer");
   if (!(await isSessionCurrent(user))) {
     await clearAllSessions();
-    redirect("/customer/login?reason=session_expired");
+    redirect("/login?role=customer&reason=session_expired");
   }
   if (!(user.modules ?? []).includes("customer")) redirect("/unauthorized");
   return user;

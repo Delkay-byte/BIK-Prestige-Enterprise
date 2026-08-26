@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 const TAB_SESSION_KEY = "bik-tab-session";
 
@@ -16,16 +16,20 @@ const TAB_SESSION_KEY = "bik-tab-session";
  * sessionStorage is tab-scoped: it is NOT shared between tabs, and it
  * is cleared when the tab is closed.
  *
- * This component redirects to /login if the flag is missing.
+ * This component redirects to /login if the flag is missing — except on the
+ * dedicated administrator login page, which is intentionally reachable without
+ * an existing session.
  */
 export default function TabSessionGuard() {
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
+    if (pathname === "/admin/login") return;
     if (!sessionStorage.getItem(TAB_SESSION_KEY)) {
       router.replace("/login");
     }
-  }, [router]);
+  }, [router, pathname]);
 
   return null;
 }
