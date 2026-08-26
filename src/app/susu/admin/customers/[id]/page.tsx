@@ -79,6 +79,12 @@ export default function SusuCustomerDetailPage() {
   const [collectorSearch, setCollectorSearch] = useState("");
   const [reassigning, setReassigning] = useState(false);
 
+  // Statement view state
+  const [statementFilter, setStatementFilter] = useState<"all" | "contributions" | "withdrawals">("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [viewMode, setViewMode] = useState<"cycles" | "statement">("cycles");
+
   async function loadCustomer() {
     try {
       const [customerData, collectorData] = await Promise.all([
@@ -176,6 +182,105 @@ export default function SusuCustomerDetailPage() {
     return { totalContributed, totalWithdrawn, totalCommissions, paidDays: paidDays.size };
   }
 
+  // Current Savings Summary (derived from current cycle)
+  const currentCycleStats = currentCycle ? getCycleStats(currentCycle) : null;
+  const currentBalance = currentCycleStats
+    ? currentCycleStats.totalContributed - currentCycleStats.totalWithdrawn - currentCycleStats.totalCommissions
+    : 0;
+  const daysCovered = currentCycleStats?.paidDays || 0;
+  const daysOutstanding = Math.max(0, 31 - daysCovered);
+
+  // Build chronological statement entries
+  function buildStatementEntries() {
+    if (!account) return [];
+    const entries: Array<{
+      date: Date;
+      type: "contribution" | "withdrawal";
+      amount: number;
+      commission?: number;
+      balance?: number;
+      channel: string;
+      receivedBy?: string;
+      reference?: string;
+      notes?: string;
+      cycleNumber: number;
+    }> = [];
+
+    account.cycles.forEach((cycle) => {
+      cycle.contributions.forEach((c) => {
+        entries.push({
+          date: new Date(c.collectionDate),
+          type: "contribution",
+          amount: Number(c.amount),
+          channel: c.channel,
+          receivedBy: c.recordedBy?.fullName,
+          cycleNumber: cycle.cycleNumber,
+        });
+      });
+      cycle.withdrawals.forEach((w) => {
+        entries.push({
+          date: new Date(w.createdAt),
+          type: "withdrawal",
+          amount: Number(w.netAmount),
+          commission: w.commissionAmount > 0 ? Number(w.commissionAmount) : undefined,
+          balance: Number(w.remainingBalance),
+          channel: "withdrawal",
+          cycleNumber: cycle.cycleNumber,
+          notes: w.notes || undefined,
+        });
+      });
+    });
+
+    return entries.sort((a, b) => a.date.getTime() - b.date.getTime());
+  }
+
+  const statementEntries = buildStatementEntries();
+
+  // Filter statement entries
+  const filteredStatementEntries = statementEntries.filter((entry) => {
+    if (statementFilter === "contributions" && entry.type !== "contribution") return false;
+    if (statementFilter === "withdrawals" && entry.type !== "withdrawal") return false;
+    if (dateFrom && entry.date < new Date(dateFrom + "T00:00:00")) return false;
+    if (dateTo && entry.date > new Date(dateTo + "T23:59:59")) return false;
+    return true;
+  });
+
+  function handleExportCSV() {
+    if (!account || !customer) return;
+    const entriesToExport = viewMode === "statement" ? filteredStatementEntries : statementEntries;
+    if (entriesToExport.length === 0) return;
+    const headers = [
+      "Date",
+      "Type",
+      "Amount",
+      "Commission",
+      "Balance",
+      "Channel",
+      "Received By",
+      "Cycle",
+      "Notes",
+    ];
+    const rows = entriesToExport.map((e) => [
+      formatDateTime(e.date),
+      e.type === "contribution" ? "Contribution" : "Withdrawal",
+      e.type === "contribution" ? String(e.amount) : String(-e.amount),
+      e.commission ? String(e.commission) : "",
+      e.balance !== undefined ? String(e.balance) : "",
+      e.type === "contribution" ? (e.channel === "collector" ? "Collector" : "Office") : "Withdrawal",
+      e.receivedBy || "",
+      String(e.cycleNumber),
+      e.notes || "",
+    ]);
+    const csv = [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `bik-prestige-susu-statement-${customer.customerId}-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div>
       <div className="mb-8">
@@ -190,6 +295,7 @@ export default function SusuCustomerDetailPage() {
             <h1 className="text-2xl font-bold text-gray-900">{customer.fullName}</h1>
             <p className="text-gray-500 mt-1">
               {customer.customerId} &bull; {customer.phone || "No phone"}
+              {customer.address && ` &bull; ${customer.address}`}
             </p>
           </div>
           <span
@@ -210,6 +316,93 @@ export default function SusuCustomerDetailPage() {
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4">
           {success}
           <button onClick={() => setSuccess("")} className="ml-2">✕</button>
+        </div>
+      )}
+
+      {/* Current Savings Summary */}
+      {account && currentCycle && currentCycleStats && (
+        <div className="card border-l-4 border-l-green-500 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-green-700">Current Savings Summary</h2>
+            <span className={`badge ${currentCycle.status === "active" ? "badge-green" : "badge-blue"}`}>
+              Current Cycle: {formatDate(currentCycle.startDate)} – {formatDate(currentCycle.endDate)}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            <div className="bg-green-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-green-600">Current Balance</div>
+              <div className="text-2xl font-bold text-green-800"><CediAmount amount={currentBalance} /></div>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-blue-600">Total Saved</div>
+              <div className="font-semibold"><CediAmount amount={currentCycleStats.totalContributed} /></div>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-purple-600">Commission</div>
+              <div className="font-semibold"><CediAmount amount={currentCycleStats.totalCommissions} /></div>
+            </div>
+            <div className="bg-orange-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-orange-600">Total Withdrawn</div>
+              <div className="font-semibold"><CediAmount amount={currentCycleStats.totalWithdrawn} /></div>
+            </div>
+            <div className="bg-emerald-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-emerald-600">Days Covered</div>
+              <div className="font-semibold text-lg">{daysCovered}/31</div>
+            </div>
+            <div className="bg-yellow-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-yellow-600">Days Outstanding</div>
+              <div className="font-semibold text-lg">{daysOutstanding}</div>
+            </div>
+          </div>
+          <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm">
+            <div className="flex justify-between text-gray-600">
+              <span>Daily Rate:</span>
+              <span className="font-medium"><CediAmount amount={currentCycle.dailyContribution} />/day</span>
+            </div>
+            {currentCycleStats.totalCommissions > 0 && (
+              <div className="flex justify-between text-purple-600 mt-1">
+                <span>First-withdrawal commission charged:</span>
+                <span className="font-medium"><CediAmount amount={currentCycleStats.totalCommissions} /></span>
+              </div>
+            )}
+            {currentCycleStats.totalCommissions === 0 && (
+              <div className="flex justify-between text-gray-500 mt-1">
+                <span>First-withdrawal commission:</span>
+                <span className="font-medium">Not yet charged</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Physical Card Check */}
+      {account && currentCycle && currentCycleStats && (
+        <div className="card border border-dashed border-gray-300 mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">💳</span>
+            <h3 className="font-semibold text-gray-700">Physical Card Check</h3>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <div>
+              <div className="text-gray-500">Daily Contribution</div>
+              <div className="font-semibold"><CediAmount amount={account.dailyContribution} />/day</div>
+            </div>
+            <div>
+              <div className="text-gray-500">Days Covered (Digital)</div>
+              <div className="font-semibold">{daysCovered}/31</div>
+            </div>
+            <div>
+              <div className="text-gray-500">Current Cycle</div>
+              <div className="font-semibold">Cycle {currentCycle.cycleNumber}</div>
+            </div>
+            <div>
+              <div className="text-gray-500">Current Balance (Digital)</div>
+              <div className="font-semibold text-green-700"><CediAmount amount={currentBalance} /></div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-3">
+            Compare with physical Susu card. Digital ledger is authoritative; reconcile during pilot.
+          </p>
         </div>
       )}
 
@@ -243,6 +436,26 @@ export default function SusuCustomerDetailPage() {
             </div>
           </>
         )}
+      </div>
+
+      {/* View Toggle */}
+      <div className="flex gap-2 mb-6">
+        <button
+          onClick={() => setViewMode("cycles")}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            viewMode === "cycles" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          Cycle History
+        </button>
+        <button
+          onClick={() => setViewMode("statement")}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            viewMode === "statement" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          Account Statement
+        </button>
       </div>
 
       {/* Collector History */}
@@ -279,10 +492,15 @@ export default function SusuCustomerDetailPage() {
         </div>
       )}
 
-      {/* Cycles */}
-      {account && account.cycles.length > 0 && (
+      {/* Cycle History View */}
+      {viewMode === "cycles" && account && account.cycles.length > 0 && (
         <div className="space-y-6">
-          <h2 className="text-xl font-bold text-gray-900">Cycle History</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900">Cycle History</h2>
+            <button onClick={handleExportCSV} className="btn btn-secondary btn-sm" disabled={statementEntries.length === 0}>
+              📥 Export Statement CSV
+            </button>
+          </div>
           {account.cycles.map((cycle) => {
             const stats = getCycleStats(cycle);
             return (
@@ -382,6 +600,109 @@ export default function SusuCustomerDetailPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Account Statement View */}
+      {viewMode === "statement" && (
+        <div className="card">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+            <h2 className="text-xl font-bold text-gray-900">Account Statement</h2>
+            <div className="flex flex-wrap gap-2">
+              <select
+                value={statementFilter}
+                onChange={(e) => setStatementFilter(e.target.value as "all" | "contributions" | "withdrawals")}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+              >
+                <option value="all">All Transactions</option>
+                <option value="contributions">Contributions Only</option>
+                <option value="withdrawals">Withdrawals Only</option>
+              </select>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                placeholder="Date From"
+              />
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                placeholder="Date To"
+              />
+              <button onClick={handleExportCSV} className="btn btn-secondary btn-sm" disabled={filteredStatementEntries.length === 0}>
+                📥 Export CSV
+              </button>
+            </div>
+          </div>
+
+          {filteredStatementEntries.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <p className="text-4xl mb-2">📋</p>
+              <p className="font-medium">No transactions found</p>
+              <p className="text-sm mt-1">Try adjusting your filters.</p>
+            </div>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Commission</th>
+                    <th>Balance</th>
+                    <th>Channel / Received By</th>
+                    <th>Cycle</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredStatementEntries.map((entry) => (
+                    <tr key={`${entry.date.getTime()}-${entry.type}-${entry.amount}`}>
+                      <td className="text-sm whitespace-nowrap">{formatDateTime(entry.date)}</td>
+                      <td>
+                        <span className={`badge ${entry.type === "contribution" ? "badge-green" : "badge-orange"}`}>
+                          {entry.type === "contribution" ? "Contribution" : "Withdrawal"}
+                        </span>
+                      </td>
+                      <td className="font-mono font-semibold text-right">
+                        {entry.type === "contribution" ? (
+                          <>+<CediAmount amount={entry.amount} /></>
+                        ) : (
+                          <>-<CediAmount amount={entry.amount} /></>
+                        )}
+                      </td>
+                      <td className="font-mono text-right">
+                        {entry.commission ? (
+                          <span className="text-purple-600"><CediAmount amount={entry.commission} /></span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="font-mono text-right">
+                        {entry.balance !== undefined ? <CediAmount amount={entry.balance} /> : <span className="text-gray-400">—</span>}
+                      </td>
+                      <td className="text-sm">
+                        {entry.type === "contribution" ? (
+                          <>
+                            {entry.channel === "collector" ? "Collector" : "Office"}
+                            {entry.receivedBy && <span className="ml-1">({entry.receivedBy})</span>}
+                          </>
+                        ) : (
+                          "Withdrawal"
+                        )}
+                      </td>
+                      <td className="text-sm text-gray-500">Cycle {entry.cycleNumber}</td>
+                      <td className="text-sm text-gray-500 max-w-xs truncate">{entry.notes || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
