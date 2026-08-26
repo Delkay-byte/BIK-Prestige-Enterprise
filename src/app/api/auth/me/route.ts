@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminSession, getMomoSession, getSusuSession } from "@/lib/auth";
+import { getAdminSession, getMomoSession, getSusuSession, getCustomerSession } from "@/lib/auth";
 
 /**
  * Return the authenticated user for the given module.
- * Accepts ?module=admin|susu so dashboards don't accidentally read
+ * Accepts ?module=admin|susu|customer so dashboards don't accidentally read
  * another role's session when multiple cookies are present.
  */
 export async function GET(request: NextRequest) {
@@ -16,9 +16,11 @@ export async function GET(request: NextRequest) {
     user = await getMomoSession();
   } else if (requestedModule === "susu") {
     user = await getSusuSession();
+  } else if (requestedModule === "customer") {
+    user = await getCustomerSession();
   } else {
     // Fallback: try all, but prefer the most-specific match
-    user = (await getMomoSession()) ?? (await getSusuSession()) ?? (await getAdminSession());
+    user = (await getMomoSession()) ?? (await getSusuSession()) ?? (await getAdminSession()) ?? (await getCustomerSession());
   }
 
   if (!user) {

@@ -11,6 +11,7 @@ import {
   getAdminSession,
   getMomoSession,
   getSusuSession,
+  getCustomerSession,
   getSelectionUser,
   isSessionCurrent,
   createSelectionToken,
@@ -382,4 +383,155 @@ export async function changePassword(
   });
 
   return { success: true };
+}
+
+export async function customerLogin(
+  formData: FormData
+): Promise<ActionResponse | void> {
+  const identifier = (formData.get("identifier") as string)?.trim();
+  const password = formData.get("password") as string;
+
+  if (!identifier || !password) {
+    return { success: false, error: "Customer ID/Phone/Email and password are required" };
+  }
+
+  // Rate limiting: 5 attempts per 15 minutes per identifier
+  const rateLimitResult = checkRateLimit(`customer_login:${identifier.toLowerCase()}`);
+  if (!rateLimitResult.allowed) {
+    return {
+      success: false,
+      error: "Too many login attempts. Please try again in 15 minutes.",
+    };
+  }
+
+  // Try to find customer by customerId, phone, or email
+  const customer = await db.customer.findFirst({
+    where: {
+      OR: [
+        { customerId: identifier },
+        { phone: identifier },
+        { email: identifier },
+      ],
+      portalEnabled: true,
+    },
+  });
+
+  if (!customer) {
+    return { success: false, error: "Invalid credentials or portal not enabled" };
+  }
+
+  if (customer.status !== "active") {
+    return { success: false, error: "Your account is inactive. Please contact support." };
+  }
+
+  if (!customer.portalPasswordHash) {
+    return { success: false, error: "Portal access not configured. Please contact administrator." };
+  }
+
+  const valid = await verifyPassword(password, customer.portalPasswordHash);
+  if (!valid) {
+    return { success: false, error: "Invalid credentials" };
+  }
+
+  // Create customer session payload
+  const payload: JwtPayload = {
+    userId: customer.id,
+    email: customer.email || `${customer.customerId}@bik-prestige.local`,
+    fullName: customer.fullName,
+    role: "customer",
+    modules: ["customer"],
+    forcePasswordReset: customer.forcePortalPasswordReset ?? false,
+    tokenVersion: 0,
+  };
+
+  await setModuleSession("customer", payload);
+
+  await createAuditLog({
+    userId: customer.id,
+    action: "auth.customer_login",
+    entityType: "customer",
+    entityId: customer.id,
+  });
+
+  if (payload.forcePasswordReset) {
+    redirect("/customer/settings?tab=password");
+  }
+  redirect("/customer/dashboard");
+}
+
+export async function customerChangePassword(
+  formData: FormData
+): Promise<ActionResponse> {
+  const session = await getCustomerSession();
+  if (!session) {
+    return { success: false, error: "Not authenticated" };
+  }
+  if (!(await isSessionCurrent(session))) {
+    await clearAllSessions();
+    return { success: false, error: "Session expired. Please sign in again." };
+  }
+
+  const currentPassword = (formData.get("currentPassword") as string)?.trim();
+  const newPassword = (formData.get("newPassword") as string)?.trim();
+  const confirmPassword = (formData.get("confirmPassword") as string)?.trim();
+
+  if (!currentPassword) {
+    return { success: false, error: "Current password is required" };
+  }
+
+  if (newPassword !== confirmPassword) {
+    return { success: false, error: "Passwords don't match" };
+  }
+
+  if (newPassword.length < 8) {
+    return { success: false, error: "Password must be at least 8 characters" };
+  }
+
+  const customer = await db.customer.findUnique({ where: { id: session.userId } });
+  if (!customer) {
+    return { success: false, error: "Customer not found" };
+  }
+
+  const valid = await verifyPassword(currentPassword, customer.portalPasswordHash || "");
+  if (!valid) {
+    return { success: false, error: "Current password is incorrect" };
+  }
+
+  const wasForced = !!session.forcePasswordReset;
+
+  const newHash = await hashPassword(newPassword);
+  await db.customer.update({
+    where: { id: session.userId },
+    data: {
+      portalPasswordHash: newHash,
+      forcePortalPasswordReset: false,
+    },
+  });
+
+  // Re-issue customer session
+  const refreshed = { ...session, forcePasswordReset: false };
+  await setModuleSession("customer", refreshed);
+
+  await createAuditLog({
+    userId: session.userId,
+    action: wasForced ? "auth.first_customer_password_changed" : "auth.customer_password_changed",
+    entityType: "customer",
+    entityId: session.userId,
+  });
+
+  return { success: true };
+}
+
+export async function customerLogout(): Promise<void> {
+  const session = await getCustomerSession();
+  if (session) {
+    await createAuditLog({
+      userId: session.userId,
+      action: "auth.customer_logout",
+      entityType: "customer",
+      entityId: session.userId,
+    });
+  }
+  await clearModuleSession("customer");
+  redirect("/customer/login");
 }

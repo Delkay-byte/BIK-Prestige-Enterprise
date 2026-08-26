@@ -241,3 +241,52 @@ export async function getWorkerById(id: string) {
     },
   });
 }
+
+/**
+ * Search authorized staff members for "Received By" dropdown.
+ * Only returns active internal staff (admin, worker, collector roles).
+ * Case-insensitive search on name, email, and phone.
+ */
+export async function searchStaff(query: string) {
+  await requireAdmin();
+
+  if (!query || query.length < 2) return [];
+
+  const normalizedQuery = query.trim().toLowerCase();
+
+  // Fetch broader set for SQLite case-insensitive matching
+  const candidates = await db.user.findMany({
+    where: {
+      status: "active",
+      role: { in: ["admin", "worker", "collector"] },
+      OR: [
+        { fullName: { contains: normalizedQuery } },
+        { email: { contains: normalizedQuery } },
+        { phone: { contains: normalizedQuery } },
+        { fullName: { contains: normalizedQuery.toUpperCase() } },
+        { email: { contains: normalizedQuery.toUpperCase() } },
+      ],
+    },
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      role: true,
+    },
+    take: 20,
+    orderBy: { fullName: "asc" },
+  });
+
+  // Deduplicate and apply case-insensitive filter
+  const seen = new Set<string>();
+  return candidates.filter((u) => {
+    if (seen.has(u.id)) return false;
+    const nameLower = u.fullName.toLowerCase();
+    const emailLower = (u.email || "").toLowerCase();
+    const matches =
+      nameLower.includes(normalizedQuery) ||
+      emailLower.includes(normalizedQuery);
+    if (matches) seen.add(u.id);
+    return matches;
+  }).slice(0, 10);
+}

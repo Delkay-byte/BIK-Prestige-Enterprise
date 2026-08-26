@@ -28,12 +28,14 @@ const SESSION_COOKIES = {
   admin: "bik-admin-session",
   momo: "bik-worker-session",
   susu: "bik-collector-session",
+  customer: "bik-customer-session",
 } as const;
 
 const SELECTION_COOKIE = "bik-workspace-select";
 const LEGACY_COOKIE = "bik-prestige-token";
 
 const PUBLIC_ROUTES = ["/login", "/forgot-password", "/reset-password", "/api/health", "/api/diag"];
+const CUSTOMER_PUBLIC_ROUTES = ["/customer/login", "/customer/forgot-password"];
 
 interface TokenClaims {
   role?: string;
@@ -62,8 +64,29 @@ async function readClaims(token: string | undefined): Promise<TokenClaims | null
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  const redirectTo = (path: string) => NextResponse.redirect(new URL(path, request.url));
+
+  const res = () => {
+    const r = NextResponse.next();
+    // Protected pages must never be served from browser cache/back navigation.
+    r.headers.set("Cache-Control", "no-store, must-revalidate");
+    return r;
+  };
+
   // Allow public routes (login, health check)
   if (PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
+    return NextResponse.next();
+  }
+
+  // Allow customer public routes (separate from staff)
+  if (CUSTOMER_PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
+    // Redirect staff who hit customer public routes to their own login
+    const anyStaffSession = await Promise.all(
+      ["admin", "momo", "susu"].map((mod) => readClaims(request.cookies.get(SESSION_COOKIES[mod as keyof typeof SESSION_COOKIES])?.value))
+    );
+    if (anyStaffSession.some(Boolean)) {
+      return redirectTo("/login");
+    }
     return NextResponse.next();
   }
 
@@ -77,14 +100,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const res = () => {
-    const r = NextResponse.next();
-    // Protected pages must never be served from browser cache/back navigation.
-    r.headers.set("Cache-Control", "no-store, must-revalidate");
-    return r;
-  };
+  // Customer portal: completely separate session, never mixed with staff
+  if (pathname.startsWith("/customer")) {
+    const customerClaims = await readClaims(request.cookies.get(SESSION_COOKIES.customer)?.value);
+    if (!customerClaims) {
+      return redirectTo("/customer/login");
+    }
+    if (customerClaims.role !== "customer") {
+      return redirectTo("/customer/login");
+    }
+    // First-login mandatory password change for customer
+    if (customerClaims.forcePasswordReset) {
+      const settingsAllowed = pathname.startsWith("/customer/settings");
+      if (!settingsAllowed) {
+        return redirectTo("/customer/settings?tab=password");
+      }
+    }
+    return res();
+  }
 
-  const redirectTo = (path: string) => NextResponse.redirect(new URL(path, request.url));
+  // Staff routes below — customers must not access staff areas
+  // (Already handled: /customer/* is caught above)
 
   // Which module does this path belong to?
   let pathModule: keyof typeof SESSION_COOKIES | null = null;
@@ -94,7 +130,13 @@ export async function middleware(request: NextRequest) {
 
   // Root: send the person to any active workspace.
   if (pathname === "/") {
+    // Check customer session first
+    const customerClaims = await readClaims(request.cookies.get(SESSION_COOKIES.customer)?.value);
+    if (customerClaims && customerClaims.role === "customer") {
+      return redirectTo("/customer/dashboard");
+    }
     for (const [mod, name] of Object.entries(SESSION_COOKIES)) {
+      if (mod === "customer") continue; // Already checked above
       const claims = await readClaims(request.cookies.get(name)?.value);
       if (claims && claimsMatchModule(claims, mod as keyof typeof SESSION_COOKIES)) {
         return redirectTo(

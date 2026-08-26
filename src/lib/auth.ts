@@ -64,13 +64,14 @@ export const SESSION_POLICY = {
  * module, not per tab — no superficial workaround is applied.
  */
 
-export type ModuleName = "admin" | "momo" | "susu";
+export type ModuleName = "admin" | "momo" | "susu" | "customer";
 
 const LEGACY_COOKIE_NAME = "bik-prestige-token";
 export const SESSION_COOKIES: Record<ModuleName, string> = {
   admin: "bik-admin-session",
   momo: "bik-worker-session",
   susu: "bik-collector-session",
+  customer: "bik-customer-session",
 };
 export const SELECTION_COOKIE_NAME = "bik-workspace-select";
 
@@ -78,8 +79,8 @@ export interface JwtPayload {
   userId: string;
   email: string;
   fullName?: string;
-  role: "admin" | "worker" | "collector"; // primary role (kept for compatibility)
-  modules?: ("momo" | "susu")[];          // authorized business modules
+  role: "admin" | "worker" | "collector" | "customer"; // primary role (kept for compatibility)
+  modules?: ("momo" | "susu" | "customer")[];          // authorized business modules
   locationId?: string;
   collectorId?: string;
   forcePasswordReset?: boolean;
@@ -245,6 +246,7 @@ export async function clearAllSessions() {
   cookieStore.delete(SESSION_COOKIES.admin);
   cookieStore.delete(SESSION_COOKIES.momo);
   cookieStore.delete(SESSION_COOKIES.susu);
+  cookieStore.delete(SESSION_COOKIES.customer);
   cookieStore.delete(SELECTION_COOKIE_NAME);
   // Legacy single-cookie sessions (pre hardening)
   cookieStore.delete(LEGACY_COOKIE_NAME);
@@ -319,9 +321,13 @@ export async function getSusuSession(): Promise<JwtPayload | null> {
   return readModuleCookie("susu");
 }
 
+export async function getCustomerSession(): Promise<JwtPayload | null> {
+  return readModuleCookie("customer");
+}
+
 /** Any authenticated module session (used by shared APIs such as /api/auth/me). */
 export async function getAnyAuthUser(): Promise<JwtPayload | null> {
-  return (await getAdminSession()) ?? (await getMomoSession()) ?? (await getSusuSession());
+  return (await getAdminSession()) ?? (await getMomoSession()) ?? (await getSusuSession()) ?? (await getCustomerSession());
 }
 
 export async function getSelectionUser(): Promise<SelectionPayload | null> {
@@ -440,6 +446,18 @@ export async function requireCollector(): Promise<JwtPayload> {
     redirect("/login?reason=session_expired");
   }
   if (!(user.modules ?? []).includes("susu")) redirect("/unauthorized");
+  return user;
+}
+
+/** Guard for Customer portal pages/actions: requires an active customer capability. */
+export async function requireCustomer(): Promise<JwtPayload> {
+  const user = await getCustomerSession();
+  if (!user) redirect("/customer/login");
+  if (!(await isSessionCurrent(user))) {
+    await clearAllSessions();
+    redirect("/customer/login?reason=session_expired");
+  }
+  if (!(user.modules ?? []).includes("customer")) redirect("/unauthorized");
   return user;
 }
 

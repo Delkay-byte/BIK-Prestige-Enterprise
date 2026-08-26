@@ -3,10 +3,11 @@ import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getCustomerById, reassignCustomer } from "@/lib/actions/susu-customer.actions";
+import { getCustomerById, reassignCustomer, createCustomerPortalAccess, resetCustomerPassword, toggleCustomerPortal } from "@/lib/actions/susu-customer.actions";
 import { getCollectors } from "@/lib/actions/susu-collector.actions";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import CediAmount from "@/components/CediAmount";
+import PasswordInput from "@/components/PasswordInput";
 
 interface CustomerDetail {
   id: string;
@@ -16,6 +17,8 @@ interface CustomerDetail {
   address?: string | null;
   status: string;
   registeredAt: Date;
+  portalEnabled: boolean;
+  portalPasswordHash?: string | null;
   accounts: Array<{
     id: string;
     accountId: string;
@@ -37,6 +40,8 @@ interface CustomerDetail {
         collectionDate: Date;
         channel: string;                          allocations: Array<{ cycleDay: number; amount: number }>;
                           recordedBy?: { fullName: string } | null;
+                          receivedBy?: { fullName: string } | null;
+                          collector?: { user?: { fullName: string } } | null;
                         }>;
                         withdrawals: Array<{
                           id: string;
@@ -79,6 +84,16 @@ export default function SusuCustomerDetailPage() {
   const [collectorSearch, setCollectorSearch] = useState("");
   const [reassigning, setReassigning] = useState(false);
 
+  // Customer portal provisioning
+  const [showPortalForm, setShowPortalForm] = useState(false);
+  const [portalLoginId, setPortalLoginId] = useState("");
+  const [portalTempPassword, setPortalTempPassword] = useState("");
+  const [portalProvisioning, setPortalProvisioning] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [resettingPassword, setResettingPassword] = useState(false);
+
   // Statement view state
   const [statementFilter, setStatementFilter] = useState<"all" | "contributions" | "withdrawals">("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -104,6 +119,89 @@ export default function SusuCustomerDetailPage() {
   useEffect(() => {
     loadCustomer();
   }, [params.id]);
+
+  // ── Customer Portal Provisioning ──────────────────────────────────
+  async function handleCreatePortalAccess() {
+    if (!customer) return;
+    setPortalProvisioning(true);
+    setError("");
+    setSuccess("");
+    try {
+      const formData = new FormData();
+      formData.set("loginIdentifier", portalLoginId || customer.customerId);
+      formData.set("temporaryPassword", portalTempPassword);
+      const result = await createCustomerPortalAccess(customer.id, formData);
+      if (result.success) {
+        setSuccess("Customer portal access created successfully.");
+        setShowPortalForm(false);
+        setPortalLoginId("");
+        setPortalTempPassword("");
+        loadCustomer();
+      } else {
+        setError(result.error || "Failed to create portal access");
+      }
+    } catch (err) {
+      if (isRedirectError(err)) throw err;
+      setError("An unexpected error occurred");
+    } finally {
+      setPortalProvisioning(false);
+    }
+  }
+
+  async function handleResetCustomerPassword() {
+    if (!customer) return;
+    if (resetNewPassword !== resetConfirmPassword) {
+      setError("Passwords don't match");
+      return;
+    }
+    if (resetNewPassword.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+    setResettingPassword(true);
+    setError("");
+    setSuccess("");
+    try {
+      const formData = new FormData();
+      formData.set("newPassword", resetNewPassword);
+      const result = await resetCustomerPassword(customer.id, formData);
+      if (result.success) {
+        setSuccess("Customer password reset. Customer will need to change password on next login.");
+        setShowResetPassword(false);
+        setResetNewPassword("");
+        setResetConfirmPassword("");
+        loadCustomer();
+      } else {
+        setError(result.error || "Failed to reset password");
+      }
+    } catch (err) {
+      if (isRedirectError(err)) throw err;
+      setError("An unexpected error occurred");
+    } finally {
+      setResettingPassword(false);
+    }
+  }
+
+  async function handleTogglePortal(enabled: boolean) {
+    if (!customer) return;
+    setPortalProvisioning(true);
+    setError("");
+    setSuccess("");
+    try {
+      const result = await toggleCustomerPortal(customer.id, enabled);
+      if (result.success) {
+        setSuccess(enabled ? "Customer portal enabled." : "Customer portal disabled.");
+        loadCustomer();
+      } else {
+        setError(result.error || "Failed to toggle portal");
+      }
+    } catch (err) {
+      if (isRedirectError(err)) throw err;
+      setError("An unexpected error occurred");
+    } finally {
+      setPortalProvisioning(false);
+    }
+  }
 
   async function handleReassign() {
     if (!newCollectorId || !customer) return;
@@ -479,6 +577,158 @@ export default function SusuCustomerDetailPage() {
         </div>
       )}
 
+      {/* Customer Portal Access */}
+      <div className="card mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-lg">Customer Portal Access</h3>
+          {customer.portalEnabled ? (
+            <span className="badge badge-green">Active</span>
+          ) : customer.portalPasswordHash ? (
+            <span className="badge badge-yellow">Disabled</span>
+          ) : (
+            <span className="badge badge-gray">Not Enabled</span>
+          )}
+        </div>
+
+        {!customer.portalEnabled && !customer.portalPasswordHash && !showPortalForm && (
+          <div>
+            <p className="text-sm text-gray-500 mb-3">Customer does not have portal access yet.</p>
+            <button
+              onClick={() => setShowPortalForm(true)}
+              className="btn btn-primary btn-sm"
+            >
+              Create Login
+            </button>
+          </div>
+        )}
+
+        {customer.portalEnabled && !showResetPassword && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleTogglePortal(false)}
+              className="btn btn-secondary btn-sm"
+              disabled={portalProvisioning}
+            >
+              Disable Portal
+            </button>
+            <button
+              onClick={() => setShowResetPassword(true)}
+              className="btn btn-secondary btn-sm"
+            >
+              Reset Password
+            </button>
+          </div>
+        )}
+
+        {!customer.portalEnabled && customer.portalPasswordHash && !showPortalForm && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleTogglePortal(true)}
+              className="btn btn-primary btn-sm"
+              disabled={portalProvisioning}
+            >
+              Enable Customer Portal
+            </button>
+            <button
+              onClick={() => setShowResetPassword(true)}
+              className="btn btn-secondary btn-sm"
+            >
+              Reset Password
+            </button>
+          </div>
+        )}
+
+        {/* Create Portal Access Form */}
+        {showPortalForm && (
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <h4 className="font-medium mb-3">Create Customer Portal Login</h4>
+            <div className="space-y-3">
+              <div className="form-group">
+                <label className="form-label">Login Identifier</label>
+                <input
+                  type="text"
+                  value={portalLoginId}
+                  onChange={(e) => setPortalLoginId(e.target.value)}
+                  placeholder={customer.customerId}
+                  className="w-full"
+                />
+                <p className="form-hint">Customer will use this to sign in. Defaults to Customer ID.</p>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Temporary Password</label>
+                <PasswordInput
+                  value={portalTempPassword}
+                  onChange={(e) => setPortalTempPassword(e.target.value)}
+                  placeholder="Min 8 characters"
+                  required
+                />
+                <p className="form-hint">Customer will be required to change this on first login.</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCreatePortalAccess}
+                  className="btn btn-primary btn-sm"
+                  disabled={portalProvisioning || !portalTempPassword}
+                >
+                  {portalProvisioning ? "Creating..." : "Create Login"}
+                </button>
+                <button
+                  onClick={() => { setShowPortalForm(false); setPortalLoginId(""); setPortalTempPassword(""); }}
+                  className="btn btn-secondary btn-sm"
+                  disabled={portalProvisioning}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reset Password Form */}
+        {showResetPassword && (
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <h4 className="font-medium mb-3">Reset Customer Password</h4>
+            <div className="space-y-3">
+              <div className="form-group">
+                <label className="form-label">New Password</label>
+                <PasswordInput
+                  value={resetNewPassword}
+                  onChange={(e) => setResetNewPassword(e.target.value)}
+                  placeholder="Min 8 characters"
+                  required
+                />
+                <p className="form-hint">Existing sessions will be invalidated. Customer must change password on next login.</p>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Confirm Password</label>
+                <PasswordInput
+                  value={resetConfirmPassword}
+                  onChange={(e) => setResetConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  required
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleResetCustomerPassword}
+                  className="btn btn-primary btn-sm"
+                  disabled={resettingPassword || !resetNewPassword || !resetConfirmPassword}
+                >
+                  {resettingPassword ? "Resetting..." : "Reset Password"}
+                </button>
+                <button
+                  onClick={() => { setShowResetPassword(false); setResetNewPassword(""); setResetConfirmPassword(""); }}
+                  className="btn btn-secondary btn-sm"
+                  disabled={resettingPassword}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Card Fee */}
       {account && account.cardFees.length > 0 && (
         <div className="card mb-8">
@@ -557,11 +807,11 @@ export default function SusuCustomerDetailPage() {
                             <span>{formatDate(c.collectionDate)}</span>
                             <span className="text-gray-400 ml-2">
                               ({c.channel === "collector" ? "Collector" : "Office"})
-                              {c.channel === "direct_office" && c.recordedBy?.fullName
-                                ? ` — Received by ${c.recordedBy.fullName}`
-                                : c.channel === "collector"
-                                ? ``
-                                : " — Not recorded"}
+                              {c.channel === "direct_office" && c.receivedBy?.fullName
+                                ? ` — Received by ${c.receivedBy.fullName}`
+                                : c.channel === "collector" && c.collector?.user?.fullName
+                                ? ` — Collected by ${c.collector.user.fullName}`
+                                : ""}
                             </span>
                           </div>
                           <span className="font-mono"><CediAmount amount={c.amount} /></span>

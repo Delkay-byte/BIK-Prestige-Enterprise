@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 
 export default function CustomerDetailError({
   error,
@@ -25,9 +26,9 @@ export default function CustomerDetailError({
           <button onClick={reset} className="btn btn-primary">
             Reload
           </button>
-          <a href="/susu/admin/customers" className="btn btn-secondary">
+          <Link href="/susu/admin/customers" className="btn btn-secondary">
             Back to Customers
-          </a>
+          </Link>
         </div>
       </div>
     </div>

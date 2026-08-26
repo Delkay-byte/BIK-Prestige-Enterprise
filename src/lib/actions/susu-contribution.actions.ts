@@ -21,15 +21,19 @@ export interface ActionResponse {
  *
  * The client must NOT supply collectorId — it is always resolved from the
  * authenticated user's session to prevent impersonation.
+ *
+ * For direct_office channel, admin can optionally specify receivedById (the staff
+ * member who physically received the money). If not provided, recordedById is used.
  */
 export async function recordContribution(params: {
   accountId: string;
   amount: number;
   channel: "collector" | "direct_office";
   collectorId?: string; // Admin-only: manually selected collector. Ignored for collector role.
+  receivedById?: string; // Admin-only for direct_office: staff who received the money
   notes?: string;
 }): Promise<ActionResponse> {
-  const { accountId, amount, channel, notes } = params;
+  const { accountId, amount, channel, collectorId, receivedById, notes } = params;
 
   // ── 1. Authenticate ─────────────────────────────────────────────────
   const user = await getAnyAuthUser();
@@ -109,10 +113,31 @@ export async function recordContribution(params: {
   const cycle = account.cycles[0];
   const dailyContribution = Number(cycle.dailyContribution);
 
-  // ── 6. Generate idempotency key ─────────────────────────────────────
+  // ── 6. Determine receivedById for direct_office channel ──────────────
+  let effectiveReceivedById: string | null = null;
+  if (channel === "direct_office") {
+    if (user.role === "admin" && receivedById) {
+      // Verify the receivedById is an authorized staff member
+      const receivedByUser = await db.user.findUnique({
+        where: { id: receivedById },
+      });
+      if (!receivedByUser) {
+        return { success: false, error: "Selected staff member not found" };
+      }
+      if (receivedByUser.status !== "active") {
+        return { success: false, error: "Selected staff member is not active" };
+      }
+      effectiveReceivedById = receivedById;
+    } else {
+      // Default to the recording user
+      effectiveReceivedById = user.userId;
+    }
+  }
+
+  // ── 7. Generate idempotency key ─────────────────────────────────────
   const referenceId = `CON-${randomBytes(8).toString("hex")}`;
 
-  // ── 7. Database transaction (financial integrity) ───────────────────
+  // ── 8. Database transaction (financial integrity) ───────────────────
   const result = await db.$transaction(async (tx) => {
     // Create the contribution record
     const contribution = await tx.contribution.create({
@@ -124,6 +149,7 @@ export async function recordContribution(params: {
         channel,
         collectorId: effectiveCollectorId,
         recordedById: user.userId,
+        receivedById: effectiveReceivedById,
         referenceId,
         notes,
       },
@@ -179,6 +205,7 @@ export async function recordContribution(params: {
       amount,
       channel,
       collectorId: effectiveCollectorId,
+      receivedById: effectiveReceivedById,
       daysAllocated: result.daysAllocated,
       allocatedAmount: result.allocatedAmount,
       referenceId,
@@ -198,6 +225,7 @@ export async function recordContribution(params: {
       daysAllocated: result.daysAllocated,
       allocatedAmount: Number(result.allocatedAmount),
       referenceId,
+      receivedById: effectiveReceivedById,
     },
   };
 }
@@ -241,6 +269,7 @@ export async function getContributions(params?: {
         allocations: true,
         collector: { include: { user: { select: { fullName: true } } } },
         recordedBy: { select: { fullName: true } },
+        receivedBy: { select: { fullName: true } },
       },
       orderBy: { collectionDate: "desc" },
       skip,

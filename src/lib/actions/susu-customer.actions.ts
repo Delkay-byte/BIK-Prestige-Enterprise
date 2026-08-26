@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAuth, requireAdmin } from "@/lib/auth";
+import { requireAuth, requireAdmin, requireCustomer, hashPassword } from "@/lib/auth";
 import { createAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 
@@ -226,10 +226,10 @@ export async function getCustomerById(id: string) {
           cycles: {
             orderBy: { cycleNumber: "desc" },
             include: {
-              contributions: {
-                orderBy: { collectionDate: "asc" },
-                include: { allocations: true, recordedBy: { select: { fullName: true } } },
-              },
+               contributions: {
+                 orderBy: { collectionDate: "asc" },
+                 include: { allocations: true, recordedBy: { select: { fullName: true } }, receivedBy: { select: { fullName: true } } },
+               },
               withdrawals: { orderBy: { createdAt: "desc" } },
               commissions: true,
             },
@@ -340,12 +340,20 @@ export async function searchCustomers(query: string) {
 
   if (!query || query.length < 2) return [];
 
-  return db.customer.findMany({
+  // For SQLite, contains() is case-sensitive. We fetch more results
+  // and filter in-memory for case-insensitive matching.
+  const normalizedQuery = query.trim().toLowerCase();
+
+  // Fetch candidates with a broader match (lowercase the query for SQLite LIKE)
+  const candidates = await db.customer.findMany({
     where: {
       OR: [
-        { fullName: { contains: query } },
-        { customerId: { contains: query } },
-        { phone: { contains: query } },
+        { fullName: { contains: normalizedQuery } },
+        { customerId: { contains: normalizedQuery } },
+        { phone: { contains: normalizedQuery } },
+        // Also try uppercase variant for SQLite case sensitivity
+        { fullName: { contains: normalizedQuery.toUpperCase() } },
+        { customerId: { contains: normalizedQuery.toUpperCase() } },
       ],
       status: "active",
     },
@@ -357,6 +365,435 @@ export async function searchCustomers(query: string) {
         },
       },
     },
-    take: 10,
+    take: 20,
   });
+
+  // Deduplicate and apply case-insensitive filter
+  const seen = new Set<string>();
+  return candidates.filter((c) => {
+    if (seen.has(c.id)) return false;
+    const nameLower = c.fullName.toLowerCase();
+    const idLower = c.customerId.toLowerCase();
+    const phoneLower = (c.phone || "").toLowerCase();
+    const matches =
+      nameLower.includes(normalizedQuery) ||
+      idLower.includes(normalizedQuery) ||
+      phoneLower.includes(normalizedQuery);
+    if (matches) seen.add(c.id);
+    return matches;
+  }).slice(0, 10);
+}
+
+export async function getCustomerAccount() {
+  const session = await requireCustomer();
+
+  return db.customer.findUnique({
+    where: { id: session.userId },
+    include: {
+      accounts: {
+        where: { status: "active" },
+        take: 1,
+        include: {
+          cycles: {
+            where: { status: "active" },
+            take: 1,
+            include: {
+               contributions: {
+                 orderBy: { collectionDate: "desc" },
+                 take: 20,
+                 include: {
+                   allocations: true,
+                   receivedBy: { select: { fullName: true } },
+                   collector: { include: { user: { select: { fullName: true } } } },
+                 },
+               },
+              withdrawals: { orderBy: { createdAt: "desc" }, take: 20 },
+              commissions: { orderBy: { createdAt: "desc" } },
+            },
+          },
+        },
+      },
+      assignments: {
+        where: { active: true },
+        include: { collector: { include: { user: { select: { fullName: true } } } } },
+      },
+    },
+  });
+}
+
+export async function getCustomerPayments() {
+  const session = await requireCustomer();
+
+  return db.contribution.findMany({
+    where: {
+      account: {
+        customerId: session.userId,
+      },
+    },
+    include: {
+      cycle: { select: { cycleNumber: true } },
+      collector: { include: { user: { select: { fullName: true } } } },
+      receivedBy: { select: { fullName: true } },
+      allocations: true,
+    },
+    orderBy: { collectionDate: "desc" },
+  });
+}
+
+export async function getCustomerCycles() {
+  const session = await requireCustomer();
+
+  const customer = await db.customer.findUnique({
+    where: { id: session.userId },
+    include: {
+      accounts: {
+        where: { status: "active" },
+        take: 1,
+        include: {
+          cycles: {
+            orderBy: { cycleNumber: "desc" },
+            include: {
+              contributions: {
+                include: { allocations: true },
+              },
+              withdrawals: true,
+              commissions: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!customer || !customer.accounts[0]) return [];
+
+  const account = customer.accounts[0];
+
+  return account.cycles.map((cycle) => {
+    const totalContributed = cycle.contributions.reduce((sum, c) => sum + Number(c.amount), 0);
+    const totalWithdrawn = cycle.withdrawals.reduce((sum, w) => sum + Number(w.netAmount), 0);
+    const totalCommissions = cycle.commissions.reduce((sum, c) => sum + Number(c.amount), 0);
+    const paidDays = new Set(
+      cycle.contributions.flatMap((c) => c.allocations.map((a) => a.cycleDay))
+    ).size;
+    const balance = totalContributed - totalWithdrawn - totalCommissions;
+
+    return {
+      id: cycle.id,
+      cycleNumber: cycle.cycleNumber,
+      startDate: cycle.startDate,
+      endDate: cycle.endDate,
+      dailyContribution: Number(cycle.dailyContribution),
+      status: cycle.status,
+      totalContributed,
+      totalWithdrawn,
+      totalCommissions,
+      paidDays,
+      balance,
+    };
+  });
+}
+
+export async function getCustomerWithdrawals() {
+  const session = await requireCustomer();
+
+  return db.withdrawal.findMany({
+    where: {
+      account: {
+        customerId: session.userId,
+      },
+    },
+    include: {
+      cycle: { select: { cycleNumber: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export async function getCustomerStatement() {
+  const session = await requireCustomer();
+
+  // Get contributions
+  const contributions = await db.contribution.findMany({
+    where: {
+      account: {
+        customerId: session.userId,
+      },
+    },
+      include: {
+        cycle: { select: { cycleNumber: true } },
+        receivedBy: { select: { fullName: true } },
+      },
+      orderBy: { collectionDate: "asc" },
+    });
+
+  // Get withdrawals
+  const withdrawals = await db.withdrawal.findMany({
+    where: {
+      account: {
+        customerId: session.userId,
+      },
+    },
+    include: {
+      cycle: { select: { cycleNumber: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  // Get commissions
+  const commissions = await db.commission.findMany({
+    where: {
+      account: {
+        customerId: session.userId,
+      },
+    },
+    include: {
+      cycle: { select: { cycleNumber: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  // Build chronological statement
+  const entries: Array<{
+    date: Date;
+    type: "contribution" | "withdrawal" | "commission";
+    amount: number;
+    balance?: number;
+    channel: string;
+    receivedBy?: string;
+    cycleNumber: number;
+    notes?: string;
+  }> = [];
+
+  let runningBalance = 0;
+
+  contributions.forEach((c) => {
+    runningBalance += Number(c.amount);
+    entries.push({
+      date: new Date(c.collectionDate),
+      type: "contribution",
+      amount: Number(c.amount),
+      balance: runningBalance,
+       channel: c.channel,
+       receivedBy: c.receivedBy?.fullName,
+       cycleNumber: c.cycle.cycleNumber,
+    });
+  });
+
+  withdrawals.forEach((w) => {
+    runningBalance -= Number(w.netAmount);
+    entries.push({
+      date: new Date(w.createdAt),
+      type: "withdrawal",
+      amount: Number(w.netAmount),
+      balance: runningBalance,
+      channel: "withdrawal",
+      cycleNumber: w.cycle.cycleNumber,
+      notes: w.notes || undefined,
+    });
+
+    if (Number(w.commissionAmount) > 0) {
+      runningBalance -= Number(w.commissionAmount);
+      entries.push({
+        date: new Date(w.createdAt),
+        type: "commission",
+        amount: Number(w.commissionAmount),
+        balance: runningBalance,
+        channel: "commission",
+        cycleNumber: w.cycle.cycleNumber,
+      });
+    }
+  });
+
+  commissions.forEach((c) => {
+    runningBalance -= Number(c.amount);
+    entries.push({
+      date: new Date(c.createdAt),
+      type: "commission",
+      amount: Number(c.amount),
+      balance: runningBalance,
+      channel: "commission",
+      cycleNumber: c.cycle.cycleNumber,
+    });
+  });
+
+  return entries.sort((a, b) => a.date.getTime() - b.date.getTime());
+}
+
+export async function getCustomerProfile() {
+  const session = await requireCustomer();
+
+  return db.customer.findUnique({
+    where: { id: session.userId },
+    include: {
+      accounts: {
+        where: { status: "active" },
+        take: 1,
+        include: {
+          cycles: {
+            where: { status: "active" },
+            take: 1,
+          },
+        },
+      },
+      assignments: {
+        where: { active: true },
+        include: { collector: { include: { user: { select: { fullName: true } } } } },
+      },
+    },
+  });
+}
+
+// ===================================================================
+// ADMIN CUSTOMER PORTAL PROVISIONING
+// ===================================================================
+
+/**
+ * Admin creates customer portal login credentials.
+ * Sets a temporary password and forces password change on first login.
+ */
+export async function createCustomerPortalAccess(
+  customerId: string,
+  formData: FormData
+): Promise<ActionResponse> {
+  const admin = await requireAdmin();
+
+  const loginIdentifier = (formData.get("loginIdentifier") as string)?.trim();
+  const temporaryPassword = formData.get("temporaryPassword") as string;
+
+  if (!loginIdentifier) {
+    return { success: false, error: "Login identifier is required" };
+  }
+  if (!temporaryPassword || temporaryPassword.length < 8) {
+    return { success: false, error: "Temporary password must be at least 8 characters" };
+  }
+
+  const customer = await db.customer.findUnique({ where: { id: customerId } });
+  if (!customer) {
+    return { success: false, error: "Customer not found" };
+  }
+
+  if (customer.portalEnabled && customer.portalPasswordHash) {
+    return { success: false, error: "Customer already has portal access. Use password reset instead." };
+  }
+
+  const passwordHash = await hashPassword(temporaryPassword);
+
+  await db.customer.update({
+    where: { id: customerId },
+    data: {
+      portalEnabled: true,
+      portalPasswordHash: passwordHash,
+      forcePortalPasswordReset: true,
+    },
+  });
+
+  // Invalidate any existing customer sessions
+  // (tokenVersion isn't on Customer model, but portalPasswordReset flag suffices)
+
+  await createAuditLog({
+    userId: admin.userId,
+    action: "susu.customer_portal_created",
+    entityType: "customer",
+    entityId: customerId,
+    details: {
+      customerId: customer.customerId,
+      customerName: customer.fullName,
+      loginIdentifier,
+    },
+  });
+
+  revalidatePath(`/susu/admin/customers/${customerId}`);
+  revalidatePath("/susu/admin/customers");
+  return { success: true };
+}
+
+/**
+ * Admin resets a customer's portal password.
+ * Invalidates existing sessions and forces password change.
+ */
+export async function resetCustomerPassword(
+  customerId: string,
+  formData: FormData
+): Promise<ActionResponse> {
+  const admin = await requireAdmin();
+
+  const newPassword = formData.get("newPassword") as string;
+  if (!newPassword || newPassword.length < 8) {
+    return { success: false, error: "Password must be at least 8 characters" };
+  }
+
+  const customer = await db.customer.findUnique({ where: { id: customerId } });
+  if (!customer) {
+    return { success: false, error: "Customer not found" };
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+
+  await db.customer.update({
+    where: { id: customerId },
+    data: {
+      portalPasswordHash: passwordHash,
+      forcePortalPasswordReset: true,
+    },
+  });
+
+  await createAuditLog({
+    userId: admin.userId,
+    action: "susu.customer_portal_password_reset",
+    entityType: "customer",
+    entityId: customerId,
+    details: {
+      customerId: customer.customerId,
+      customerName: customer.fullName,
+      sessionsInvalidated: true,
+    },
+  });
+
+  revalidatePath(`/susu/admin/customers/${customerId}`);
+  return { success: true };
+}
+
+/**
+ * Admin enables or disables customer portal access.
+ * Disabling does NOT delete financial records.
+ */
+export async function toggleCustomerPortal(
+  customerId: string,
+  enabled: boolean
+): Promise<ActionResponse> {
+  const admin = await requireAdmin();
+
+  const customer = await db.customer.findUnique({ where: { id: customerId } });
+  if (!customer) {
+    return { success: false, error: "Customer not found" };
+  }
+
+  if (!enabled && !customer.portalEnabled) {
+    return { success: false, error: "Customer portal is already disabled" };
+  }
+
+  if (enabled && !customer.portalPasswordHash) {
+    return { success: false, error: "Cannot enable portal without creating login credentials first" };
+  }
+
+  await db.customer.update({
+    where: { id: customerId },
+    data: { portalEnabled: enabled },
+  });
+
+  await createAuditLog({
+    userId: admin.userId,
+    action: enabled ? "susu.customer_portal_enabled" : "susu.customer_portal_disabled",
+    entityType: "customer",
+    entityId: customerId,
+    details: {
+      customerId: customer.customerId,
+      customerName: customer.fullName,
+    },
+  });
+
+  revalidatePath(`/susu/admin/customers/${customerId}`);
+  revalidatePath("/susu/admin/customers");
+  return { success: true };
 }
