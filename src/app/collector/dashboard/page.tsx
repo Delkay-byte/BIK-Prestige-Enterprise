@@ -129,7 +129,9 @@ export default function CollectorDashboardPage() {
       try {
         const did = await getOrCreateDeviceId();
         setDeviceId(did);
-        const checkRes = await fetch(`/api/offline/enroll?deviceId=${encodeURIComponent(did)}`);
+        const checkRes = await fetch(`/api/offline/enroll?deviceId=${encodeURIComponent(did)}`, {
+          credentials: "include",
+        });
         if (!cancelled && checkRes.ok) {
           const checkData = await checkRes.json();
           if (checkData.enrolled) {
@@ -181,6 +183,10 @@ export default function CollectorDashboardPage() {
   // needed) and then start the offline session.
   async function enrollAndStartOffline() {
     if (offlineEnabled) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setError("You appear to be offline. Connect to the internet once to enable offline mode.");
+      return;
+    }
     setEnrollingOffline(true);
     setError("");
     try {
@@ -189,6 +195,7 @@ export default function CollectorDashboardPage() {
       const res = await fetch("/api/offline/enroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ deviceId: did, module: "susu" }),
       });
       if (!res.ok) {
@@ -200,8 +207,9 @@ export default function CollectorDashboardPage() {
       if (result.device?.authorizedAt) setOfflineAuthorizedAt(result.device.authorizedAt);
       else setOfflineAuthorizedAt(new Date());
       await startOfflineSession();
-    } catch {
-      setError("Could not reach the server to enable offline mode.");
+    } catch (err) {
+      console.error("Offline enrollment failed:", err);
+      setError("Could not reach the server to enable offline mode. Check your connection and try again.");
     } finally {
       setEnrollingOffline(false);
     }
