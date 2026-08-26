@@ -54,7 +54,7 @@ export default function OfflineDevicesSettings() {
       });
       const data = await res.json();
       if (data.success) {
-        setSuccess("Device revoked successfully");
+        setSuccess("Device revoked. It can no longer synchronize offline collections.");
         loadDevices();
       } else {
         setError(data.error || "Failed to revoke device");

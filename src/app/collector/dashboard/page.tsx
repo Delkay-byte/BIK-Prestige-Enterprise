@@ -106,9 +106,9 @@ export default function CollectorDashboardPage() {
     return () => { stopAutoSync(); };
   }, []);
 
-  // Online/offline listener
+  // Online/offline listener — always attached so the connectivity indicator
+  // reflects the real network state (and we auto-sync when reconnecting).
   useEffect(() => {
-    if (!offlineEnabled) return;
     const handleOnline = () => { setIsOnline(true); attemptSync(); };
     const handleOffline = () => setIsOnline(false);
     window.addEventListener("online", handleOnline);
@@ -380,34 +380,35 @@ export default function CollectorDashboardPage() {
             <h1 className="text-2xl font-bold text-gray-900">{getGreeting()}, {user?.fullName || "Collector"} 👋</h1>
             <p className="text-sm text-green-600 italic mt-1">&ldquo;{quote}&rdquo;</p>
           </div>
-          {offlineEnabled ? (
-            <div className="text-right">
-              {offlineAuthExpired && !isOnline ? (
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700">
-                  <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                  Reconnect required
-                </div>
-              ) : (
-                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${isOnline ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-700"}`}>
-                  <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-green-500" : "bg-yellow-500"}`}></span>
-                  {isOnline ? "Online" : "Offline"}
-                </div>
-              )}
-              {lastSyncTime && <p className="text-[10px] text-gray-400 mt-1">Last sync: {lastSyncTime}</p>}
-              {!isOnline && !offlineAuthExpired && offlineAuthExpiry > 0 && (
-                <p className="text-[10px] text-yellow-600 mt-1">Offline auth expires in {Math.floor(offlineAuthExpiry / 3600)}h{Math.floor((offlineAuthExpiry % 3600) / 60)}m</p>
-              )}
+          <div className="text-right flex flex-col items-end gap-1">
+            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${isOnline ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-700"}`}>
+              <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-green-500" : "bg-yellow-500"}`}></span>
+              {isOnline ? "Online" : "Offline"}
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={enrollAndStartOffline}
-              disabled={enrollingOffline}
-              className="btn btn-secondary text-sm"
-            >
-              {enrollingOffline ? "Enabling…" : "📱 Enable Offline"}
-            </button>
-          )}
+            {offlineEnabled ? (
+              <>
+                {offlineAuthExpired && !isOnline && (
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700">
+                    <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                    Reconnect required
+                  </div>
+                )}
+                {lastSyncTime && <p className="text-[10px] text-gray-400">Last sync: {lastSyncTime}</p>}
+                {!isOnline && !offlineAuthExpired && offlineAuthExpiry > 0 && (
+                  <p className="text-[10px] text-yellow-600">Offline auth expires in {Math.floor(offlineAuthExpiry / 3600)}h{Math.floor((offlineAuthExpiry % 3600) / 60)}m</p>
+                )}
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={enrollAndStartOffline}
+                disabled={enrollingOffline}
+                className="btn btn-secondary text-sm"
+              >
+                {enrollingOffline ? "Enabling…" : "📱 Enable Offline"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

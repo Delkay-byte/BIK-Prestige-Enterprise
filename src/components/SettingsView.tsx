@@ -221,12 +221,14 @@ export default function SettingsView({ module }: { module: "admin" | "momo" | "s
                 </div>
               )}
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> Profile information is read-only. Contact your administrator
-                  to update your name, email, phone, or assigned location.
-                </p>
-              </div>
+              {module !== "admin" && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800">
+                    <strong>Note:</strong> Profile information is read-only. Contact your administrator
+                    to update your name, email, phone, or assigned location.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
