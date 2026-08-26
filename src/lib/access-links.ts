@@ -24,7 +24,7 @@ export const ACCESS_LINKS: AccessLink[] = [
     icon: "👤",
     description: "View your Susu savings and account",
     shortPath: "/login/customer",
-    instruction: "Use your Customer ID, phone number or email and password to sign in.",
+    instruction: "Use your Customer ID, phone or email and password.",
   },
   {
     key: "momo",
@@ -32,7 +32,7 @@ export const ACCESS_LINKS: AccessLink[] = [
     icon: "💰",
     description: "Manage your daily MoMo transactions",
     shortPath: "/login/momo",
-    instruction: "Use your staff login details provided by your administrator.",
+    instruction: "Use the staff login details provided by your administrator.",
   },
   {
     key: "susu",
@@ -40,7 +40,7 @@ export const ACCESS_LINKS: AccessLink[] = [
     icon: "🧑‍💼",
     description: "Manage customer savings collections",
     shortPath: "/login/susu",
-    instruction: "Use your staff login details provided by your administrator.",
+    instruction: "Use the staff login details provided by your administrator.",
   },
   {
     key: "admin",
@@ -48,7 +48,7 @@ export const ACCESS_LINKS: AccessLink[] = [
     icon: "🔐",
     description: "Manage BIK Prestige Enterprise",
     shortPath: "/admin/login",
-    instruction: "Administrator access is separate from the staff and customer login.",
+    instruction: "Use the separate administrator login.",
     admin: true,
   },
 ];

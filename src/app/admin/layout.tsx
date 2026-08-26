@@ -11,6 +11,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // The administrator login is a public, standalone page. It must NOT inherit
+  // the authenticated dashboard shell (sidebar, navigation, TabSessionGuard).
+  // Render it cleanly with only the root layout.
+  if (pathname === "/admin/login") {
+    return <>{children}</>;
+  }
+
   function isActive(href: string) {
     if (href === "/admin/dashboard") return pathname === href;
     if (href === "/susu/admin") return pathname === "/susu/admin";
