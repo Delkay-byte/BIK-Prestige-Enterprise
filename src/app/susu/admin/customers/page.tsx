@@ -9,6 +9,7 @@ import {
 } from "@/lib/actions/susu-customer.actions";
 import { getCollectors, assignCustomerToCollector } from "@/lib/actions/susu-collector.actions";
 import { formatCedi, formatDate } from "@/lib/utils";
+import CediAmount from "@/components/CediAmount";
 import Link from "next/link";
 
 interface Customer {
@@ -286,7 +287,7 @@ export default function SusuCustomersPage() {
                         {account?.accountId || "—"}
                       </td>
                       <td className="font-mono text-sm">
-                        {account ? formatCedi(account.dailyContribution) + "/day" : "—"}
+                        {account ? <><CediAmount amount={account.dailyContribution} />/day</> : "—"}
                       </td>
                       <td>
                         {cycle ? (

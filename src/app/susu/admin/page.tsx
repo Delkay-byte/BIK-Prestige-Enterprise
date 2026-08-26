@@ -65,11 +65,11 @@ export default function SusuAdminOverviewPage() {
   ];
 
   const financialCards = [
-    { label: "Today's Contributions", value: formatCedi(stats.todayContributions), icon: "💵", color: "bg-green-50" },
-    { label: "Today's Withdrawals", value: formatCedi(stats.todayWithdrawals), icon: "🏧", color: "bg-orange-50" },
-    { label: "Today's Commission", value: formatCedi(stats.todayCommission), icon: "💼", color: "bg-purple-50" },
-    { label: "Card Fee Income", value: formatCedi(stats.totalCardFees), icon: "💳", color: "bg-indigo-50" },
-    { label: "Pending Remittances", value: formatCedi(stats.pendingRemittances), icon: "🏦", color: stats.pendingRemittances > 0 ? "bg-red-50" : "bg-green-50" },
+    { label: "Today's Contributions", value: stats.todayContributions, icon: "💵", color: "bg-green-50" },
+    { label: "Today's Withdrawals", value: stats.todayWithdrawals, icon: "🏧", color: "bg-orange-50" },
+    { label: "Today's Commission", value: stats.todayCommission, icon: "💼", color: "bg-purple-50" },
+    { label: "Card Fee Income", value: stats.totalCardFees, icon: "💳", color: "bg-indigo-50" },
+    { label: "Pending Remittances", value: stats.pendingRemittances, icon: "🏦", color: stats.pendingRemittances > 0 ? "bg-red-50" : "bg-green-50" },
   ];
 
   return (
@@ -98,7 +98,7 @@ export default function SusuAdminOverviewPage() {
               <span className="text-2xl">{card.icon}</span>
               <div>
                 <div className="text-sm text-gray-500">{card.label}</div>
-                <div className="text-xl font-bold">{card.value}</div>
+                <div className="text-xl font-bold"><CediAmount amount={card.value} /></div>
               </div>
             </div>
           </div>
@@ -112,7 +112,7 @@ export default function SusuAdminOverviewPage() {
               <span className="text-2xl">{card.icon}</span>
               <div>
                 <div className="text-sm text-gray-500">{card.label}</div>
-                <div className="text-xl font-bold">{card.value}</div>
+                <div className="text-xl font-bold"><CediAmount amount={card.value} /></div>
               </div>
             </div>
           </div>

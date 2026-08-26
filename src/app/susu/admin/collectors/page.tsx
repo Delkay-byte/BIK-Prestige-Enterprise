@@ -13,6 +13,7 @@ import { getActiveLocations } from "@/lib/actions/location.actions";
 import PasswordInput from "@/components/PasswordInput";
 import ReauthDialog from "@/components/ReauthDialog";
 import { formatCedi } from "@/lib/utils";
+import CediAmount from "@/components/CediAmount";
 
 interface CollectorData {
   id: string;
@@ -230,7 +231,7 @@ export default function SusuCollectorsPage() {
                       </td>
                       <td>{c.assignments.length}</td>
                       <td className="font-mono text-sm">
-                        {todayCollected > 0 ? formatCedi(todayCollected) : "—"}
+                        {todayCollected > 0 ? <CediAmount amount={todayCollected} /> : "—"}
                       </td>
                       <td>
                         {lastRemittance ? (

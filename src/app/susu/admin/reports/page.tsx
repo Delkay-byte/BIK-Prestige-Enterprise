@@ -229,7 +229,7 @@ export default function SusuReportsPage() {
                       </td>
                       <td className="font-mono text-sm"><CediAmount amount={w.requestedAmount} /></td>
                       <td className="font-mono text-sm">
-                        {w.commissionAmount > 0 ? formatCedi(w.commissionAmount) : <span className="text-gray-400">—</span>}
+                        {w.commissionAmount > 0 ? <CediAmount amount={w.commissionAmount} /> : <span className="text-gray-400">—</span>}
                       </td>
                       <td className="font-mono text-sm font-semibold"><CediAmount amount={w.netAmount} /></td>
                       <td><span className="badge badge-blue">Cycle {w.cycle.cycleNumber}</span></td>
