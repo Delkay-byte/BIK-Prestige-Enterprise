@@ -1,12 +1,11 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
-
-import { useEffect, useState } from "react";
 import { getContributions, recordContribution } from "@/lib/actions/susu-contribution.actions";
 import { searchCustomers } from "@/lib/actions/susu-customer.actions";
 import { getCollectors } from "@/lib/actions/susu-collector.actions";
 import { formatCedi, formatDate, formatDateTime } from "@/lib/utils";
 import CediAmount from "@/components/CediAmount";
+import { useEffect, useState } from "react";
+import { isRedirectError } from "@/lib/errors";
 
 interface Contribution {
   id: string;
@@ -60,6 +59,29 @@ export default function SusuContributionsPage() {
   const [channel, setChannel] = useState<"collector" | "direct_office">("direct_office");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ fullName: string } | null>(null);
+
+  // Load current user for "Received By" field
+  useEffect(() => {
+    async function loadCurrentUser() {
+      try {
+        const authRes = await fetch("/api/auth/me?module=susu");
+        if (authRes.ok) {
+          const authUser = await authRes.json();
+          if (authUser?.userId) {
+            const userRes = await fetch(`/api/user/${authUser.userId}`);
+            if (userRes.ok) {
+              const userData = await userRes.json();
+              setCurrentUser({ fullName: userData.fullName });
+            }
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    loadCurrentUser();
+  }, []);
 
   useEffect(() => {
     loadContributions();
@@ -157,6 +179,42 @@ export default function SusuContributionsPage() {
     }
   }
 
+  function handleExportCSV() {
+    if (contributions.length === 0) return;
+    const headers = [
+      "Date",
+      "Customer",
+      "Customer ID",
+      "Account ID",
+      "Amount",
+      "Days Covered",
+      "Channel",
+      "Received By",
+      "Notes",
+    ];
+    const rows = contributions.map((c) => [
+      formatDateTime(c.collectionDate),
+      c.account.customer.fullName,
+      c.account.customer.customerId,
+      c.account.accountId,
+      String(c.amount),
+      String(c.allocations.length),
+      c.channel === "collector" ? "Collector" : "Office",
+      c.channel === "collector"
+        ? c.collector?.user?.fullName || "—"
+        : c.recordedBy?.fullName || "Not recorded",
+      c.notes || "",
+    ]);
+    const csv = [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `bik-prestige-susu-contributions-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
@@ -164,9 +222,14 @@ export default function SusuContributionsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Contributions</h1>
           <p className="text-gray-500 mt-1">Record and view Susu contributions</p>
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="btn btn-primary">
-          {showForm ? "Cancel" : "+ Record Contribution"}
-        </button>
+        <div className="flex gap-2">
+          <button onClick={handleExportCSV} className="btn btn-secondary btn-sm" disabled={contributions.length === 0}>
+            📥 Export CSV
+          </button>
+          <button onClick={() => setShowForm(!showForm)} className="btn btn-primary">
+            {showForm ? "Cancel" : "+ Record Contribution"}
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -271,6 +334,15 @@ export default function SusuContributionsPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+            )}
+            {channel === "direct_office" && (
+              <div className="form-group">
+                <label className="form-label">Received By</label>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <div className="font-medium text-gray-900">{currentUser?.fullName || "Loading..."}</div>
+                  <p className="form-hint text-xs mt-1">You are recording this payment under your account.</p>
+                </div>
               </div>
             )}
             <div className="form-group">

@@ -4,7 +4,7 @@ import { isRedirectError } from "@/lib/errors";
 import { useEffect, useState } from "react";
 import { getContributions } from "@/lib/actions/susu-contribution.actions";
 import { getWithdrawals } from "@/lib/actions/susu-withdrawal.actions";
-import { formatCedi, formatDate, formatDateTime } from "@/lib/utils";
+import { formatDate, formatDateTime } from "@/lib/utils";
 import CediAmount from "@/components/CediAmount";
 
 type Tab = "contributions" | "withdrawals";

@@ -3,7 +3,6 @@ import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
 import { getSusuDashboardStats } from "@/lib/actions/susu-dashboard.actions";
-import { formatCedi } from "@/lib/utils";
 import CediAmount from "@/components/CediAmount";
 
 interface DashboardStats {

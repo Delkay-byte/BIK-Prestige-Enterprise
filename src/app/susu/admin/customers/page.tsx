@@ -8,7 +8,7 @@ import {
   toggleCustomerStatus,
 } from "@/lib/actions/susu-customer.actions";
 import { getCollectors, assignCustomerToCollector } from "@/lib/actions/susu-collector.actions";
-import { formatCedi, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import CediAmount from "@/components/CediAmount";
 import Link from "next/link";
 

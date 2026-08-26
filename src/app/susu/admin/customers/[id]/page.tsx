@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getCustomerById, reassignCustomer } from "@/lib/actions/susu-customer.actions";
 import { getCollectors } from "@/lib/actions/susu-collector.actions";
-import { formatCedi, formatDate, formatDateTime } from "@/lib/utils";
+import { formatDate, formatDateTime } from "@/lib/utils";
 import CediAmount from "@/components/CediAmount";
 
 interface CustomerDetail {

@@ -4,7 +4,7 @@ import { isRedirectError } from "@/lib/errors";
 import { useEffect, useState } from "react";
 import { getAdminDashboardStats } from "@/lib/actions/daily-account.actions";
 import { getSusuDashboardStats } from "@/lib/actions/susu-dashboard.actions";
-import { formatCedi, getGreeting, getDailyQuote } from "@/lib/utils";
+import { getGreeting, getDailyQuote } from "@/lib/utils";
 import CediAmount from "@/components/CediAmount";
 import Link from "next/link";
 

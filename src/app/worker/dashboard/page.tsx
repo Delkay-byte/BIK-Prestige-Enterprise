@@ -4,7 +4,7 @@ import { isRedirectError } from "@/lib/errors";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getWorkerDailyAccounts, createDailyAccount } from "@/lib/actions/daily-account.actions";
-import { formatCedi, formatDate, getGreeting, getTodayString, getDailyQuote } from "@/lib/utils";
+import { formatDate, getGreeting, getTodayString, getDailyQuote } from "@/lib/utils";
 import Link from "next/link";
 import CediAmount from "@/components/CediAmount";
 

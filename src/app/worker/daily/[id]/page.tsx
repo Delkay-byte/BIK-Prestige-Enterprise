@@ -4,7 +4,7 @@ import { isRedirectError } from "@/lib/errors";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getDailyAccountById, saveDailyAccount, submitDailyAccount } from "@/lib/actions/daily-account.actions";
-import { formatCedi, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import InfoTooltip from "@/components/InfoTooltip";
 import CediAmount from "@/components/CediAmount";
 

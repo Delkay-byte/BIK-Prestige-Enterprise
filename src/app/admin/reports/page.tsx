@@ -4,7 +4,7 @@ import { isRedirectError } from "@/lib/errors";
 import { useEffect, useState } from "react";
 import { getDailyAccounts } from "@/lib/actions/daily-account.actions";
 import { getLocations } from "@/lib/actions/location.actions";
-import { formatCedi, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import Link from "next/link";
 import CediAmount from "@/components/CediAmount";
 
