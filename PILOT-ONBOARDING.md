@@ -37,6 +37,31 @@ Legacy shortcuts still work and simply pre-select the role for you:
 `/customer/login` → `/login?role=customer`,
 `/login?role=momo` (MoMo Agent), `/login?role=susu` (Susu Collector).
 
+### Friendly short links (preferred for sharing)
+
+Send each person the matching short link — they are easy to type, print,
+WhatsApp, or encode into a future QR code:
+
+| User           | Give them                      |
+| -------------- | ------------------------------ |
+| Customer       | `/login/customer`              |
+| MoMo Agent     | `/login/momo`                  |
+| Susu Collector | `/login/susu`                  |
+| Administrator  | `/admin/login`                 |
+
+There is also a public **Access Guide** at `/access` that lists all four
+options with copy-link buttons. Do **not** send `/login/admin` — admin always
+uses the separate `/admin/login`.
+
+### Customer Portal handout (future-ready)
+
+For printed onboarding cards and posters, include only the public link — never
+credentials or recovery information:
+
+> **Customer Portal**
+> Scan or visit the Customer Login link to view your savings.
+> `https://bik-prestige-enterprise.onrender.com/login/customer`
+
 ---
 
 ## For the Admin (Owner)

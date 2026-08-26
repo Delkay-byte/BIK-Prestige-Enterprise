@@ -34,7 +34,7 @@ const SESSION_COOKIES = {
 const SELECTION_COOKIE = "bik-workspace-select";
 const LEGACY_COOKIE = "bik-prestige-token";
 
-const PUBLIC_ROUTES = ["/login", "/forgot-password", "/reset-password", "/api/health", "/api/diag"];
+const PUBLIC_ROUTES = ["/access", "/login", "/forgot-password", "/reset-password", "/api/health", "/api/diag"];
 const CUSTOMER_PUBLIC_ROUTES = ["/customer/login", "/customer/forgot-password"];
 // The dedicated administrator login must be reachable without any session.
 const ADMIN_PUBLIC_ROUTES = ["/admin/login"];

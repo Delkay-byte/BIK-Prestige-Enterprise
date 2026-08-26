@@ -45,10 +45,22 @@ The platform uses a **unified non-admin login** plus a **separate admin login**.
 | Audience            | URL                        | Notes                                        |
 | ------------------- | -------------------------- | -------------------------------------------- |
 | Everyone (non-admin)| `/login`                   | Shared portal — pick your role on the screen |
-| Customer            | `/login?role=customer`     | Pre-selects the Customer card                |
-| MoMo Agent          | `/login?role=momo`         | Pre-selects the MoMo Agent card              |
-| Susu Collector      | `/login?role=susu`         | Pre-selects the Susu Collector card          |
+| Access Guide        | `/access`                  | Public page listing all four options         |
+| Customer            | `/login/customer`          | Short link → preselects Customer             |
+| MoMo Agent          | `/login/momo`              | Short link → preselects MoMo Agent           |
+| Susu Collector      | `/login/susu`              | Short link → preselects Susu Collector       |
+| Customer (legacy)   | `/login?role=customer`     | Pre-selects the Customer card                |
+| MoMo (legacy)       | `/login?role=momo`         | Pre-selects the MoMo Agent card              |
+| Susu (legacy)       | `/login?role=susu`         | Pre-selects the Susu Collector card          |
 | Administrator       | `/admin/login`             | Separate, privileged boundary                |
+
+- `/login/customer`, `/login/momo`, `/login/susu` are **redirects only** — they
+  do not create separate authentication systems; each simply opens `/login`
+  with the role preselected.
+- `/login/admin` is intentionally **not** a shared-login route; admin always
+  uses `/admin/login`.
+- The `/access` page is public (no authentication) and suitable for posters,
+  WhatsApp sharing, and future QR codes. It shows only public login URLs.
 
 - The shared `/login` page shows **only** Customer, MoMo Agent and Susu Collector.
   **Admin is never offered there.**
