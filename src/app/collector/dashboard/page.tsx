@@ -86,6 +86,7 @@ export default function CollectorDashboardPage() {
   const [offlineAuthExpired, setOfflineAuthExpired] = useState(false);
   const [offlineAuthExpiry, setOfflineAuthExpiry] = useState(0);
   const [offlineEnabled, setOfflineEnabled] = useState(false);
+  const [enrollingOffline, setEnrollingOffline] = useState(false);
 
   // UI state
   const [searchQuery, setSearchQuery] = useState("");
@@ -119,44 +120,40 @@ export default function CollectorDashboardPage() {
     };
   }, []);
 
-  async function initOffline() {
-    const did = await getOrCreateDeviceId();
-    setDeviceId(did);
-    // Check if device is already enrolled
-    try {
-      const checkRes = await fetch(`/api/offline/enroll?deviceId=${did}`);
-      if (checkRes.ok) {
-        const checkData = await checkRes.json();
-        if (checkData.enrolled) {
-          setOfflineEnabled(true);
-          if (checkData.device?.authorizedAt) {
-            setOfflineAuthorizedAt(checkData.device.authorizedAt);
+  // Resume offline mode automatically if this device was already enrolled on a
+  // previous visit (no admin action required). New devices use the
+  // "Enable Offline" button.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const did = await getOrCreateDeviceId();
+        setDeviceId(did);
+        const checkRes = await fetch(`/api/offline/enroll?deviceId=${encodeURIComponent(did)}`);
+        if (!cancelled && checkRes.ok) {
+          const checkData = await checkRes.json();
+          if (checkData.enrolled) {
+            await startOfflineSession();
           }
         }
+      } catch {
+        /* Offline unavailable — the page still works fully online. */
       }
-    } catch { /* will try enrollment below */ }
-    // Enroll device with server (idempotent)
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Cache the day's customer list into IndexedDB so collections can be
+  // recorded and viewed without a connection.
+  async function cacheCustomersForOffline() {
     try {
-      const res = await fetch("/api/offline/enroll", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId: did, module: "susu" }),
-      });
-      if (res.ok) {
-        setOfflineEnabled(true);
-        const data = await res.json();
-        if (data.device?.authorizedAt) {
-          setOfflineAuthorizedAt(data.device.authorizedAt);
-        } else {
-          setOfflineAuthorizedAt(new Date());
-        }
-      }
-    } catch { /* enrollment will happen on next sync */ }
-    await refreshPendingTxs();
-    startAutoSync(handleSyncResults);
-    // Cache customer data for offline viewing
-    if (data) {
-      const customers: CachedCustomer[] = data.toVisit.map((c) => ({
+      const authRes = await fetch("/api/auth/me?module=susu");
+      const authUser = authRes.ok ? await authRes.json() : null;
+      if (!authUser?.userId) return;
+      const dashboardData = (await getCollectorDashboardStats(authUser.userId)) as DashboardData | null;
+      const toVisit = dashboardData?.toVisit || [];
+      const customers: CachedCustomer[] = toVisit.map((c) => ({
         accountId: c.accountId,
         customerName: c.customerName,
         customerIdCode: c.customerIdCode,
@@ -166,6 +163,47 @@ export default function CollectorDashboardPage() {
         lastSynced: new Date().toISOString(),
       }));
       await cacheCustomers(customers);
+    } catch {
+      /* Non-fatal: customers will cache on the next successful sync. */
+    }
+  }
+
+  // Activate offline mode for this device (idempotent — safe to call again).
+  async function startOfflineSession() {
+    if (offlineEnabled) return;
+    setOfflineEnabled(true);
+    await refreshPendingTxs();
+    startAutoSync(handleSyncResults);
+    await cacheCustomersForOffline();
+  }
+
+  // Enroll this device with the server (self-service — no admin pre-approval
+  // needed) and then start the offline session.
+  async function enrollAndStartOffline() {
+    if (offlineEnabled) return;
+    setEnrollingOffline(true);
+    setError("");
+    try {
+      const did = await getOrCreateDeviceId();
+      setDeviceId(did);
+      const res = await fetch("/api/offline/enroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId: did, module: "susu" }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        setError(errData.error || "Could not enable offline mode. Please try again.");
+        return;
+      }
+      const result = await res.json();
+      if (result.device?.authorizedAt) setOfflineAuthorizedAt(result.device.authorizedAt);
+      else setOfflineAuthorizedAt(new Date());
+      await startOfflineSession();
+    } catch {
+      setError("Could not reach the server to enable offline mode.");
+    } finally {
+      setEnrollingOffline(false);
     }
   }
 
@@ -334,7 +372,7 @@ export default function CollectorDashboardPage() {
             <h1 className="text-2xl font-bold text-gray-900">{getGreeting()}, {user?.fullName || "Collector"} 👋</h1>
             <p className="text-sm text-green-600 italic mt-1">&ldquo;{quote}&rdquo;</p>
           </div>
-          {offlineEnabled && (
+          {offlineEnabled ? (
             <div className="text-right">
               {offlineAuthExpired && !isOnline ? (
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700">
@@ -352,6 +390,15 @@ export default function CollectorDashboardPage() {
                 <p className="text-[10px] text-yellow-600 mt-1">Offline auth expires in {Math.floor(offlineAuthExpiry / 3600)}h{Math.floor((offlineAuthExpiry % 3600) / 60)}m</p>
               )}
             </div>
+          ) : (
+            <button
+              type="button"
+              onClick={enrollAndStartOffline}
+              disabled={enrollingOffline}
+              className="btn btn-secondary text-sm"
+            >
+              {enrollingOffline ? "Enabling…" : "📱 Enable Offline"}
+            </button>
           )}
         </div>
       </div>
