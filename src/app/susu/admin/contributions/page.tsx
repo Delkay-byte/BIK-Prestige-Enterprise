@@ -66,11 +66,15 @@ export default function SusuContributionsPage() {
   const [receivedById, setReceivedById] = useState("");
   const [receivedByName, setReceivedByName] = useState("");
 
-  // Load current user for "Recorded By" field
+  // Load current user for "Recorded By" field.
+  // This page lives under /susu/admin/*, which is the ADMIN module — the
+  // "account currently being used to enter the payment" is the admin session.
+  // Reading module=susu here would show a leftover collector session (e.g. a
+  // browser that previously logged in a collector), mislabelling who recorded.
   useEffect(() => {
     async function loadCurrentUser() {
       try {
-        const authRes = await fetch("/api/auth/me?module=susu");
+        const authRes = await fetch("/api/auth/me?module=admin");
         if (authRes.ok) {
           const authUser = await authRes.json();
           if (authUser?.userId) {

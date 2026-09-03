@@ -1,7 +1,12 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAuth, requireAdmin, hashPassword } from "@/lib/auth";
+import {
+  requireAdmin,
+  hashPassword,
+  getAnyAuthUser,
+  resolveAuthenticatedCollector,
+} from "@/lib/auth";
 import { createAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
@@ -437,7 +442,7 @@ export async function getRemittances(params?: {
 /**
  * Register a new customer by a collector.
  * The customer is automatically assigned to the authenticated collector.
- * Only accessible by users with the collector role.
+ * Only accessible by users with an active Susu collector capability.
  */
 export async function registerCustomerByCollector(params: {
   fullName: string;
@@ -446,25 +451,21 @@ export async function registerCustomerByCollector(params: {
   dailyContribution: number;
   cardFee?: number;
 }): Promise<ActionResponse> {
-  const user = await requireAuth();
-
-  // Verify the user is actually a collector
-  if (user.role !== "collector") {
-    return { success: false, error: "Only collectors can register customers" };
+  // Canonical collector resolution: Susu module session + active Collector
+  // record. The primary User.role is not used — Susu capability is granted to
+  // worker-role accounts via susuEnabled, and the collector identity is always
+  // derived server-side from the session, never from browser input.
+  const resolved = await resolveAuthenticatedCollector();
+  if (!resolved) {
+    const anyUser = await getAnyAuthUser();
+    if (!anyUser) {
+      return { success: false, error: "Please sign in again." };
+    }
+    return { success: false, error: "Only Susu collectors can register customers." };
   }
 
-  // Get the collector record
-  const collector = await db.collector.findUnique({
-    where: { userId: user.userId },
-  });
-
-  if (!collector) {
-    return { success: false, error: "Collector record not found" };
-  }
-
-  if (collector.status !== "active") {
-    return { success: false, error: "Collector account is not active" };
-  }
+  const user = resolved.user;
+  const collector = resolved.collector;
 
   const { fullName, phone, address, dailyContribution, cardFee = 10 } = params;
 

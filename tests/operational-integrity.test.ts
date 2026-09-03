@@ -142,6 +142,31 @@ async function createCollectorUser(fullName: string) {
   return { user, collector };
 }
 
+/**
+ * A user whose PRIMARY role is "worker" but who has been granted the Susu
+ * collector capability (susuEnabled + an active Collector record) — exactly
+ * how the admin "Susu (collector)" toggle on /admin/workers/[id] provisions a
+ * collector. This is the account shape that previously hit the false
+ * "Only collectors can register customers" error.
+ */
+async function createSusuWorkerUser(fullName: string) {
+  const user = await prisma.user.create({
+    data: {
+      email: `${fullName.replace(/\s+/g, ".").toLowerCase()}.${Date.now()}@bikprestige.com`,
+      fullName,
+      role: "worker",
+      status: "active",
+      passwordHash: "test-hash",
+      susuEnabled: true,
+      momoEnabled: true,
+    },
+  });
+  const collector = await prisma.collector.create({
+    data: { userId: user.id, status: "active" },
+  });
+  return { user, collector };
+}
+
 async function createWorkerUser(fullName: string) {
   return prisma.user.create({
     data: {
@@ -378,6 +403,72 @@ describe("Operational Integrity — Collector Dashboard Cash Accountability", ()
     const otherStats = await getCollectorDashboardStats(otherCollector.user.id);
     expect(otherStats!.todayContributions).toBe(0);
   });
+
+  it("module-based collector (worker role + susu capability) can record collections", async () => {
+    const { user, collector } = await createSusuWorkerUser("David Asamoah");
+    const { account } = await createTestCustomer(adminId, 50, "MOD1");
+    await assignToCollector(collector.id, account.customerId, account.id);
+
+    await setCollectorSession(user.id);
+    // Injected collectorId must be ignored — attribution comes from the session
+    const result = await recordContribution({
+      accountId: account.id,
+      amount: 350,
+      channel: "collector",
+      collectorId: collectorUser.id, // bogus — must be ignored
+    });
+    expect(result.success).toBe(true);
+
+    const contribution = await prisma.contribution.findFirst({
+      where: { accountId: account.id },
+    });
+    expect(contribution!.collectorId).toBe(collector.id);
+    expect(contribution!.recordedById).toBe(user.id);
+
+    // Dashboard resolves the same collector
+    const stats = await getCollectorDashboardStats(user.id);
+    expect(stats!.todayContributions).toBe(350);
+    expect(stats!.expectedToBringIn).toBe(350);
+  });
+
+  it("leftover collector cookie never shadows the admin's Recorded By", async () => {
+    // Browser holds BOTH an admin session and a stale collector session.
+    const { user: david } = await createSusuWorkerUser("David Asamoah");
+    const ama = await createWorkerUser("Ama Serwaa");
+    const { account } = await createTestCustomer(adminId, 50, "SHAD1");
+
+    await setAdminSession(adminId);
+    // Simulate a stale collector cookie left in the same browser — the admin
+    // session must still win. (Deliberately NOT using setCollectorSession,
+    // which clears the admin cookie.)
+    mockCookieStore.set(
+      "bik-collector-session",
+      await signToken({
+        userId: david.id,
+        email: "david@bikprestige.com",
+        fullName: "David Asamoah",
+        role: "worker",
+        modules: ["momo", "susu"],
+        tokenVersion: 0,
+      })
+    );
+
+    const result = await recordContribution({
+      accountId: account.id,
+      amount: 100,
+      channel: "direct_office",
+      receivedById: ama.id,
+    });
+    expect(result.success).toBe(true);
+
+    const contribution = await prisma.contribution.findFirst({
+      where: { accountId: account.id },
+    });
+    // Received By = the staff who physically received; Recorded By = the admin
+    expect(contribution!.receivedById).toBe(ama.id);
+    expect(contribution!.recordedById).toBe(adminId);
+    expect(contribution!.collectorId).toBeNull();
+  });
 });
 
 describe("Operational Integrity — Received By / Recorded By", () => {
@@ -525,14 +616,81 @@ describe("Operational Integrity — Collector Customer Registration", () => {
     expect(total).toBe(before + 1);
   });
 
-  it("rejects a non-collector session", async () => {
+  it("rejects a non-collector session (admin) with a clear message", async () => {
     await setAdminSession(adminId);
     const result = await registerCustomerByCollector({
       fullName: "Nope",
       dailyContribution: 50,
     });
     expect(result.success).toBe(false);
-    expect(result.error).toContain("Only collectors");
+    expect(result.error).toBe("Only Susu collectors can register customers.");
+  });
+
+  it("rejects an unauthenticated request with 'Please sign in again.'", async () => {
+    mockCookieStore.clear();
+    const result = await registerCustomerByCollector({
+      fullName: "Nope",
+      dailyContribution: 50,
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Please sign in again.");
+  });
+
+  it("rejects a MoMo-only worker", async () => {
+    const worker = await prisma.user.create({
+      data: {
+        email: `momo-only-${Date.now()}@bikprestige.com`,
+        fullName: "MoMo Only",
+        role: "worker",
+        status: "active",
+        passwordHash: "test-hash",
+        momoEnabled: true,
+        susuEnabled: false,
+      },
+    });
+    mockCookieStore.set(
+      "bik-worker-session",
+      await signToken({
+        userId: worker.id,
+        email: worker.email,
+        fullName: worker.fullName,
+        role: "worker",
+        modules: ["momo"],
+        tokenVersion: 0,
+      })
+    );
+    mockCookieStore.delete("bik-admin-session");
+    mockCookieStore.delete("bik-collector-session");
+
+    const result = await registerCustomerByCollector({
+      fullName: "Nope",
+      dailyContribution: 50,
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Only Susu collectors can register customers.");
+  });
+
+  it("module-based collector (worker role + susu capability) can register a customer", async () => {
+    // Same account shape as David Asamoah: primary role "worker", granted Susu
+    // capability via susuEnabled + active Collector record.
+    const { user, collector } = await createSusuWorkerUser("David Asamoah");
+    await setCollectorSession(user.id);
+
+    const result = await registerCustomerByCollector({
+      fullName: "Efua Mensah",
+      phone: "+233241234567",
+      dailyContribution: 50,
+      cardFee: 10,
+    });
+    expect(result.success).toBe(true);
+
+    const data = result.data as {
+      customer: { customerId: string };
+      susuAccount: { accountId: string };
+      collectorId: string;
+    };
+    expect(data.customer.customerId).toMatch(/^BIK-C-\d{6}$/);
+    expect(data.collectorId).toBe(collector.id); // auto-assigned from session
   });
 });
 

@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAuth, requireAdmin } from "@/lib/auth";
+import { requireAdmin, resolveAuthenticatedCollector } from "@/lib/auth";
 
 /**
  * Get Susu dashboard overview stats for admin.
@@ -144,23 +144,18 @@ export async function getSusuDashboardStats() {
  * Only accessible by users with the collector role.
  */
 export async function getCollectorDashboardStats(collectorUserId: string) {
-  const user = await requireAuth();
-
-  // Verify the user is actually a collector
-  if (user.role !== "collector") {
-    return null;
-  }
+  // Resolve the authenticated collector canonically (Susu module session +
+  // active Collector record). The primary User.role is not used because the
+  // platform grants Susu capability to worker-role accounts via susuEnabled.
+  const resolved = await resolveAuthenticatedCollector();
+  if (!resolved) return null;
 
   // Verify the requested userId matches the authenticated user
-  if (user.userId !== collectorUserId) {
+  if (resolved.user.userId !== collectorUserId) {
     return null;
   }
 
-  const collector = await db.collector.findUnique({
-    where: { userId: collectorUserId },
-  });
-
-  if (!collector) return null;
+  const collector = resolved.collector;
 
   // Use start-of-day in UTC (consistent with the rest of the app)
   const today = new Date();

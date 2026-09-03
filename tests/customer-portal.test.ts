@@ -28,6 +28,9 @@ vi.mock("@/lib/auth", async (importActual) => {
     requireAdmin: async () => ({ userId: adminId, role: "admin" }),
     requireAuth: async () => ({ userId: adminId, role: "admin" }),
     getAnyAuthUser: async () => ({ userId: adminId, role: "admin" }),
+    getAdminSession: async () => ({ userId: adminId, role: "admin" }),
+    getSusuSession: async () => null,
+    resolveAuthenticatedCollector: async () => null,
     requireCustomer: async () => ({
       userId: customerSessionId,
       role: "customer",

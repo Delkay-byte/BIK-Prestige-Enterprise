@@ -1,7 +1,13 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { getAnyAuthUser, requireAdmin } from "@/lib/auth";
+import {
+  getAdminSession,
+  getSusuSession,
+  getAnyAuthUser,
+  requireAdmin,
+  resolveAuthenticatedCollector,
+} from "@/lib/auth";
 import { createAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
@@ -16,11 +22,15 @@ export interface ActionResponse {
  * Record a contribution and allocate it across outstanding days in the cycle.
  *
  * Identity is derived server-side from the authenticated session:
- * - Admin → can record for any account (channel = "direct_office")
+ * - Admin → can record for any account (channel = "direct_office", or
+ *   channel = "collector" with an explicit collectorId for the on-behalf flow)
  * - Collector → can only record for assigned customers (channel = "collector")
  *
- * The client must NOT supply collectorId — it is always resolved from the
- * authenticated user's session to prevent impersonation.
+ * Admin sessions are resolved from the ADMIN cookie first so that a leftover
+ * Susu collector session (e.g. a browser that previously signed in a collector)
+ * can never shadow the admin account entering an office payment. Collector
+ * identity is always resolved via the canonical resolveAuthenticatedCollector()
+ * (Susu module session + active Collector record) — never from browser input.
  *
  * For direct_office channel, admin can optionally specify receivedById (the staff
  * member who physically received the money). If not provided, recordedById is used.
@@ -37,12 +47,14 @@ export async function recordContribution(params: {
   const { accountId, amount, channel, collectorId, receivedById, notes } = params;
 
   // ── 1. Authenticate ─────────────────────────────────────────────────
-  const user = await getAnyAuthUser();
+  // Admin cookie first, then the Susu collector session. The account that
+  // enters the payment is the one recorded as recordedById.
+  const admin = await getAdminSession();
+  const susu = await getSusuSession();
+  const isAdmin = !!admin && admin.role === "admin";
+  const user = admin ?? susu;
   if (!user) {
     return { success: false, error: "Not authenticated. Please sign in again." };
-  }
-  if (user.role !== "admin" && user.role !== "collector") {
-    return { success: false, error: "Not authorized to record contributions" };
   }
 
   // ── 2. Validate amount ──────────────────────────────────────────────
@@ -52,27 +64,37 @@ export async function recordContribution(params: {
 
   // ── 3. Derive collector identity from session ───────────────────────
   let effectiveCollectorId: string | null = null;
+  let recordedById: string;
 
   if (channel === "collector") {
-    if (user.role === "collector") {
-      // Collector: always derive from session (never trust client input)
-      const userCollector = await db.collector.findUnique({
-        where: { userId: user.userId },
-      });
-      if (!userCollector) {
-        return { success: false, error: "Collector record not found for your account" };
-      }
-      effectiveCollectorId = userCollector.id;
-    } else if (user.role === "admin" && params.collectorId) {
+    if (isAdmin && collectorId) {
       // Admin recording on behalf of a collector: trust the admin-selected ID
-      const collector = await db.collector.findUnique({ where: { id: params.collectorId } });
+      const collector = await db.collector.findUnique({ where: { id: collectorId } });
       if (!collector) {
         return { success: false, error: "Selected collector not found" };
       }
-      effectiveCollectorId = params.collectorId;
+      effectiveCollectorId = collectorId;
+      recordedById = admin!.userId;
     } else {
-      return { success: false, error: "Collector identity is required for collector-channel contributions" };
+      // Collector: always derive from the canonical session resolution
+      // (never trust client input for collectorId)
+      const resolved = await resolveAuthenticatedCollector();
+      if (!resolved) {
+        const anyUser = await getAnyAuthUser();
+        if (!anyUser) {
+          return { success: false, error: "Not authenticated. Please sign in again." };
+        }
+        return { success: false, error: "Collector identity is required for collector-channel contributions" };
+      }
+      effectiveCollectorId = resolved.collector.id;
+      recordedById = resolved.user.userId;
     }
+  } else {
+    // channel === "direct_office" — office payments are entered by admins only
+    if (!isAdmin) {
+      return { success: false, error: "Only administrators can record office contributions" };
+    }
+    recordedById = admin!.userId;
   }
 
   // ── 4. Fetch account and verify ─────────────────────────────────────
@@ -117,7 +139,7 @@ export async function recordContribution(params: {
   // ── 6. Determine receivedById for direct_office channel ──────────────
   let effectiveReceivedById: string | null = null;
   if (channel === "direct_office") {
-    if (user.role === "admin" && receivedById) {
+    if (receivedById) {
       // Verify the receivedById is an authorized staff member
       const receivedByUser = await db.user.findUnique({
         where: { id: receivedById },
@@ -130,8 +152,8 @@ export async function recordContribution(params: {
       }
       effectiveReceivedById = receivedById;
     } else {
-      // Default to the recording user
-      effectiveReceivedById = user.userId;
+      // Default to the recording user (the admin entering the payment)
+      effectiveReceivedById = recordedById;
     }
   }
 
@@ -149,7 +171,7 @@ export async function recordContribution(params: {
         collectionDate: new Date(),
         channel,
         collectorId: effectiveCollectorId,
-        recordedById: user.userId,
+        recordedById,
         receivedById: effectiveReceivedById,
         receivedByName: params.receivedByName?.trim() || null,
         referenceId,
@@ -198,7 +220,7 @@ export async function recordContribution(params: {
 
   // ── 8. Audit log ────────────────────────────────────────────────────
   await createAuditLog({
-    userId: user.userId,
+    userId: recordedById,
     action: "susu.contribution_recorded",
     entityType: "contribution",
     entityId: result.contribution.id,

@@ -462,6 +462,32 @@ export async function requireCollector(): Promise<JwtPayload> {
   return user;
 }
 
+/**
+ * Canonical authenticated-collector resolution for Susu server actions.
+ *
+ * A user is a Susu collector iff they hold a valid Susu module session AND an
+ * active Collector record exists for their account. The primary User.role is
+ * deliberately NOT used: the platform grants Susu capability to worker-role
+ * accounts via susuEnabled (see updateWorker's "Susu (collector)" toggle), so
+ * role-based gates would reject legitimate collectors. This is the single
+ * server-side source of truth — collectors are never resolved from browser
+ * input (no collectorId from the client).
+ */
+export async function resolveAuthenticatedCollector(): Promise<{
+  user: JwtPayload;
+  collector: { id: string; status: string };
+} | null> {
+  const user = await getSusuSession();
+  if (!user) return null;
+  if (!(user.modules ?? []).includes("susu")) return null;
+  const collector = await db.collector.findFirst({
+    where: { userId: user.userId, status: "active" },
+    select: { id: true, status: true },
+  });
+  if (!collector) return null;
+  return { user, collector };
+}
+
 /** Guard for Customer portal pages/actions: requires an active customer capability. */
 export async function requireCustomer(): Promise<JwtPayload> {
   const user = await getCustomerSession();
