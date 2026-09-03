@@ -71,16 +71,49 @@ export async function getSusuDashboardStats() {
     }),
   ]);
 
-  // Pending Money Handed In: sum of (expectedAmount - remittedAmount) for all pending remittances
+  // Pending Money Handed In: SUM of max(Expected to Bring In - Amount Handed In, 0) across collectors
   // This represents money from collector collections that has not yet been recorded as handed in
-  const pendingRemittancesData = await db.collectorRemittance.findMany({
-    where: { status: { in: ["pending", "discrepancy"] } },
-    select: { expectedAmount: true, remittedAmount: true },
+  // Per collector: Expected to Bring In = today's collector-channel contributions
+  // Amount Handed In = today's remittances
+  // Difference = Expected to Bring In - Amount Handed In
+  // Admin sum = SUM of max(Difference, 0) across collectors (don't offset shortages with overages)
+  const collectors = await db.collector.findMany({
+    where: { status: "active" },
+    select: { id: true },
   });
-  const pendingMoneyHandedIn = pendingRemittancesData.reduce(
-    (sum, r) => sum + Number(r.expectedAmount) - Number(r.remittedAmount),
-    0
-  );
+
+  let pendingMoneyHandedIn = 0;
+  for (const collector of collectors) {
+    const todayContributions = await db.contribution.findMany({
+      where: {
+        collectorId: collector.id,
+        channel: "collector",
+        collectionDate: { gte: today, lt: tomorrow },
+      },
+      select: { amount: true },
+    });
+    const todayContributionsAmount = todayContributions.reduce(
+      (sum, c) => sum + Number(c.amount),
+      0
+    );
+
+    const todayRemittances = await db.collectorRemittance.findMany({
+      where: {
+        collectorId: collector.id,
+        createdAt: { gte: today, lt: tomorrow },
+      },
+      select: { remittedAmount: true },
+    });
+    const amountHandedInToday = todayRemittances.reduce(
+      (sum, r) => sum + Number(r.remittedAmount),
+      0
+    );
+
+    const difference = todayContributionsAmount - amountHandedInToday;
+    if (difference > 0) {
+      pendingMoneyHandedIn += difference;
+    }
+  }
 
   const outstandingToday = activeCustomers - paidTodayCustomers.length;
 
@@ -102,7 +135,7 @@ export async function getSusuDashboardStats() {
     todayNetPaid: Number(todayWithdrawals._sum.netAmount || 0),
     totalCardFees: Number(todayCardFees._sum.amount || 0),
     pendingMoneyHandedIn: Math.max(0, pendingMoneyHandedIn),
-    pendingRemittanceCount: pendingRemittancesData.length,
+    pendingRemittanceCount: 0,
   };
 }
 
