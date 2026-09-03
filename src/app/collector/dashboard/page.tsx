@@ -83,6 +83,11 @@ export default function CollectorDashboardPage() {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Errors for in-modal flows. The page-level banner sits BEHIND the full-screen
+  // modal overlays, so modal actions must show their own feedback or failures
+  // look like "nothing happened".
+  const [collectError, setCollectError] = useState("");
+  const [regError, setRegError] = useState("");
   const [quote] = useState(() => getDailyQuote("susu"));
 
   // Offline state
@@ -292,10 +297,10 @@ export default function CollectorDashboardPage() {
 
   async function handleRecordCollection() {
     if (!recordingFor || !collectAmount) return;
-    setSubmitting(true); setError(""); setSuccess("");
+    setSubmitting(true); setError(""); setSuccess(""); setCollectError("");
     try {
       const amountNum = parseFloat(collectAmount);
-      if (!amountNum || amountNum <= 0) { setError("Enter a valid amount"); return; }
+      if (!amountNum || amountNum <= 0) { setCollectError("Enter a valid amount"); return; }
 
       // Try online first
       if (navigator.onLine) {
@@ -346,22 +351,22 @@ export default function CollectorDashboardPage() {
         setRecordingFor(null); setCollectAmount(""); setCollectNotes("");
         refreshPendingTxs();
       } else {
-        setError("Unable to record. Check your connection and try again.");
+        setCollectError("Unable to record. Check your connection and try again.");
       }
     } catch (err) { if (isRedirectError(err)) throw err;
-      setError("Something went wrong. Please try again.");
+      setCollectError("Something went wrong. Please try again.");
     } finally { setSubmitting(false); }
   }
 
   async function handleRegisterCustomer() {
     if (!regFullName.trim() || !regDailyContribution) {
-      setError("Please fill in all required fields");
+      setRegError("Please fill in all required fields");
       return;
     }
 
     const dailyContributionNum = parseFloat(regDailyContribution);
     if (!dailyContributionNum || dailyContributionNum <= 0) {
-      setError("Daily contribution must be greater than 0");
+      setRegError("Daily contribution must be greater than 0");
       return;
     }
 
@@ -370,6 +375,7 @@ export default function CollectorDashboardPage() {
     setRegSubmitting(true);
     setError("");
     setSuccess("");
+    setRegError("");
 
     try {
       const result = await registerCustomerByCollector({
@@ -393,10 +399,10 @@ export default function CollectorDashboardPage() {
         setRegCardFee("10");
         loadData();
       } else {
-        setError(result.error || "Failed to register customer");
+        setRegError(result.error || "Failed to register customer");
       }
     } catch (err) { if (isRedirectError(err)) throw err;
-      setError("Something went wrong. Please try again.");
+      setRegError("Something went wrong. Please try again.");
     } finally {
       setRegSubmitting(false);
     }
@@ -446,14 +452,13 @@ export default function CollectorDashboardPage() {
             <h1 className="text-2xl font-bold text-gray-900">{getGreeting()}, {user?.fullName || "Collector"} 👋</h1>
             <p className="text-sm text-green-600 italic mt-1">&ldquo;{quote}&rdquo;</p>
           </div>
-          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setShowRegisterModal(true)}
-              className="btn btn-primary text-sm w-full sm:w-auto"
-            >
-              ➕ Register New Customer
-            </button>
+          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">              <button
+                type="button"
+                onClick={() => { setShowRegisterModal(true); setRegError(""); }}
+                className="btn btn-primary text-sm w-full sm:w-auto"
+              >
+                ➕ Register New Customer
+              </button>
             <div className="text-right flex flex-col items-end gap-1">
               <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${isOnline ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-700"}`}>
               <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-green-500" : "bg-yellow-500"}`}></span>
@@ -656,7 +661,7 @@ export default function CollectorDashboardPage() {
                   </div>
                   <div className="font-semibold text-sm text-green-700"><CediAmount amount={customer.expectedAmount} /></div>
                 </div>
-                <button onClick={() => { setRecordingFor(customer); setCollectAmount(String(customer.expectedAmount)); }}
+                <button onClick={() => { setRecordingFor(customer); setCollectAmount(String(customer.expectedAmount)); setCollectError(""); }}
                   className="btn btn-primary btn-sm w-full mt-3">💵 Collect</button>
               </div>
             ))}
@@ -772,6 +777,11 @@ export default function CollectorDashboardPage() {
                 ⚠️ You&apos;re offline. This will be saved on your device and synced when you reconnect.
               </div>
             )}
+            {collectError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-2 mb-4 text-xs text-red-700">
+                {collectError}
+              </div>
+            )}
             <div className="form-group">
               <label className="form-label">Amount Received (GH₵)</label>
               <input type="number" step="0.01" min="0.01" value={collectAmount}
@@ -788,7 +798,7 @@ export default function CollectorDashboardPage() {
               <button onClick={handleRecordCollection} className="btn btn-primary flex-1" disabled={submitting || (!isOnline && offlineEnabled && offlineAuthExpired)}>
                 {submitting ? "Recording..." : !isOnline && offlineEnabled ? (offlineAuthExpired ? "🔒 Reconnect Required" : "💾 Save on Device") : "✅ Record"}
               </button>
-              <button onClick={() => { setRecordingFor(null); setCollectAmount(""); }} className="btn btn-secondary flex-1">Cancel</button>
+              <button onClick={() => { setRecordingFor(null); setCollectAmount(""); setCollectError(""); }} className="btn btn-secondary flex-1">Cancel</button>
             </div>
           </div>
         </div>
@@ -802,6 +812,11 @@ export default function CollectorDashboardPage() {
             {!isOnline && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 mb-4 text-xs text-yellow-700">
                 ⚠️ You&apos;re offline. Customer registration requires an internet connection.
+              </div>
+            )}
+            {regError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-2 mb-4 text-xs text-red-700">
+                {regError}
               </div>
             )}
             <div className="form-group">
@@ -830,7 +845,7 @@ export default function CollectorDashboardPage() {
               <button onClick={handleRegisterCustomer} className="btn btn-primary flex-1" disabled={regSubmitting || !isOnline}>
                 {regSubmitting ? "Registering..." : "Register Customer"}
               </button>
-              <button onClick={() => { setShowRegisterModal(false); setRegFullName(""); setRegPhone(""); setRegAddress(""); setRegDailyContribution(""); setRegCardFee("10"); }} className="btn btn-secondary flex-1">Cancel</button>
+              <button onClick={() => { setShowRegisterModal(false); setRegFullName(""); setRegPhone(""); setRegAddress(""); setRegDailyContribution(""); setRegCardFee("10"); setRegError(""); }} className="btn btn-secondary flex-1">Cancel</button>
             </div>
           </div>
         </div>
