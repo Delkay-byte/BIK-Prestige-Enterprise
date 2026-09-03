@@ -42,9 +42,10 @@ export async function recordContribution(params: {
   collectorId?: string; // Admin-only: manually selected collector. Ignored for collector role.
   receivedById?: string; // Admin-only for direct_office: staff (User) who received the money
   receivedByName?: string; // Free-text name of the staff who physically received the money (office)
+  recordedByName?: string; // Free-text display name of the person recording the payment
   notes?: string;
 }): Promise<ActionResponse> {
-  const { accountId, amount, channel, collectorId, receivedById, notes } = params;
+  const { accountId, amount, channel, collectorId, receivedById, receivedByName, recordedByName, notes } = params;
 
   // ── 1. Authenticate ─────────────────────────────────────────────────
   // Admin cookie first, then the Susu collector session. The account that
@@ -172,8 +173,9 @@ export async function recordContribution(params: {
         channel,
         collectorId: effectiveCollectorId,
         recordedById,
+        recordedByName: recordedByName?.trim() || null,
         receivedById: effectiveReceivedById,
-        receivedByName: params.receivedByName?.trim() || null,
+        receivedByName: receivedByName?.trim() || null,
         referenceId,
         notes,
       },

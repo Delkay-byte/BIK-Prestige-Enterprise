@@ -214,6 +214,7 @@ model Contribution {
   recordedById    String                // User who recorded the payment
   receivedById    String?               // Staff (User) who recorded/authorised the office payment (audit)
   receivedByName  String?               // Free-text name of the staff who physically received the money
+  recordedByName  String?               // Free-text name of the person who recorded the payment (display)
   referenceId     String   @unique      // Idempotency key - prevents duplicate submissions
   notes           String?
   createdAt       DateTime @default(now())

@@ -507,6 +507,28 @@ describe("Operational Integrity — Received By / Recorded By", () => {
     expect(contribution!.collectorId).toBeNull(); // office channel has no collector
   });
 
+  it("direct office: editable Recorded By name is stored, recordedById stays session-anchored", async () => {
+    // The business types the actual recorder's name into Recorded By; the
+    // audit anchor (recordedById) must remain the authenticated account and
+    // can never be set from the browser.
+    const { account } = await createTestCustomer(adminId, 50, "RB4");
+
+    await setAdminSession(adminId);
+    const result = await recordContribution({
+      accountId: account.id,
+      amount: 100,
+      channel: "direct_office",
+      recordedByName: "Ama Serwaa", // typed by the person entering the data
+    });
+    expect(result.success).toBe(true);
+
+    const contribution = await prisma.contribution.findFirst({
+      where: { accountId: account.id },
+    });
+    expect(contribution!.recordedByName).toBe("Ama Serwaa");
+    expect(contribution!.recordedById).toBe(adminId); // session, not the typed name
+  });
+
   it("collector channel: receivedById from the browser is ignored; session collector is recorded", async () => {
     const ama = await createWorkerUser("Ama Serwaa");
     const { account } = await createTestCustomer(adminId, 50, "RB2");
