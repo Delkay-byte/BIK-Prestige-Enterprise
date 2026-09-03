@@ -35,7 +35,7 @@ interface SusuStats {
   todayWithdrawals: number;
   todayCommission: number;
   totalCardFees: number;
-  pendingRemittances: number;
+  pendingMoneyHandedIn: number;
 }
 
 export default function AdminDashboardPage() {
@@ -176,8 +176,8 @@ export default function AdminDashboardPage() {
         </div>
         <div className="card">
           <div className="text-sm text-gray-500 mb-1">Pending Money Handed In</div>
-          <div className={`text-xl font-bold ${susuStats && susuStats.pendingRemittances > 0 ? "text-red-600" : "text-green-700"}`}>
-            {susuStats ? <CediAmount amount={susuStats.pendingRemittances} /> : "—"}
+          <div className={`text-xl font-bold ${susuStats && susuStats.pendingMoneyHandedIn > 0 ? "text-red-600" : "text-green-700"}`}>
+            {susuStats ? <CediAmount amount={susuStats.pendingMoneyHandedIn} /> : "—"}
           </div>
         </div>
       </div>

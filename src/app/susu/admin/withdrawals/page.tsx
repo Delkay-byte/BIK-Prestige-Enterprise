@@ -53,7 +53,6 @@ export default function SusuWithdrawalsPage() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showReauth, setShowReauth] = useState(false);
-  const [pendingWithdrawal, setPendingWithdrawal] = useState(false);
 
   useEffect(() => {
     loadWithdrawals();
@@ -101,7 +100,6 @@ export default function SusuWithdrawalsPage() {
     }
 
     // Require reauthentication before withdrawal
-    setPendingWithdrawal(true);
     setShowReauth(true);
   }
 
@@ -143,7 +141,6 @@ export default function SusuWithdrawalsPage() {
     } finally {
       setSubmitting(false);
       setShowReauth(false);
-      setPendingWithdrawal(false);
     }
   }
 
@@ -174,7 +171,7 @@ export default function SusuWithdrawalsPage() {
 
       <ReauthDialog
         open={showReauth}
-        onClose={() => { setShowReauth(false); setPendingWithdrawal(false); }}
+        onClose={() => setShowReauth(false)}
         onConfirmed={executeWithdrawal}
         title="Confirm your identity"
         description="For your security, enter your password before completing this withdrawal."
@@ -256,7 +253,7 @@ export default function SusuWithdrawalsPage() {
             <button
               onClick={handleProcessWithdrawal}
               className="btn btn-primary"
-              disabled={submitting || !selectedCustomer}
+              disabled={submitting || showReauth || !selectedCustomer}
             >
               {submitting ? "Processing..." : "Process Withdrawal"}
             </button>

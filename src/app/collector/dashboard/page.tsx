@@ -4,6 +4,7 @@ import { isRedirectError } from "@/lib/errors";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { getCollectorDashboardStats } from "@/lib/actions/susu-dashboard.actions";
 import { recordContribution } from "@/lib/actions/susu-contribution.actions";
+import { registerCustomerByCollector } from "@/lib/actions/susu-collector.actions";
 import { formatCedi, getGreeting, getDailyQuote } from "@/lib/utils";
 import {
   addTransaction,
@@ -52,6 +53,13 @@ interface DashboardData {
   toVisit: ToVisitCustomer[];
   collectedToday: CollectedCustomer[];
   recentRemittances: RemittanceEntry[];
+  // Cash accountability
+  todayContributions: number;
+  expectedToBringIn: number;
+  amountHandedInToday: number;
+  difference: number;
+  customersCollected: number;
+  customersRemaining: number;
 }
 
 interface UserInfo {
@@ -99,6 +107,15 @@ export default function CollectorDashboardPage() {
   const [collectNotes, setCollectNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
+
+  // Customer registration modal
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [regFullName, setRegFullName] = useState("");
+  const [regPhone, setRegPhone] = useState("");
+  const [regAddress, setRegAddress] = useState("");
+  const [regDailyContribution, setRegDailyContribution] = useState("");
+  const [regCardFee, setRegCardFee] = useState("10");
+  const [regSubmitting, setRegSubmitting] = useState(false);
 
   // Initialize
   useEffect(() => {
@@ -336,6 +353,55 @@ export default function CollectorDashboardPage() {
     } finally { setSubmitting(false); }
   }
 
+  async function handleRegisterCustomer() {
+    if (!regFullName.trim() || !regDailyContribution) {
+      setError("Please fill in all required fields");
+      return;
+    }
+
+    const dailyContributionNum = parseFloat(regDailyContribution);
+    if (!dailyContributionNum || dailyContributionNum <= 0) {
+      setError("Daily contribution must be greater than 0");
+      return;
+    }
+
+    const cardFeeNum = parseFloat(regCardFee) || 10;
+
+    setRegSubmitting(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const result = await registerCustomerByCollector({
+        fullName: regFullName.trim(),
+        phone: regPhone.trim() || undefined,
+        address: regAddress.trim() || undefined,
+        dailyContribution: dailyContributionNum,
+        cardFee: cardFeeNum,
+      });
+
+      if (result.success) {
+        const data = result.data as { customer: { customerId: string; fullName: string }; susuAccount: { accountId: string } };
+        setSuccess(
+          `Customer registered successfully!\n${data.customer.fullName} (${data.customer.customerId})\nAccount: ${data.susuAccount.accountId}\nDaily: ${formatCedi(dailyContributionNum)}/day`
+        );
+        setShowRegisterModal(false);
+        setRegFullName("");
+        setRegPhone("");
+        setRegAddress("");
+        setRegDailyContribution("");
+        setRegCardFee("10");
+        loadData();
+      } else {
+        setError(result.error || "Failed to register customer");
+      }
+    } catch (err) { if (isRedirectError(err)) throw err;
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setRegSubmitting(false);
+    }
+  }
+
   // Filtered + sorted data
   const filteredToVisit = useMemo(() => {
     if (!data) return [];
@@ -380,8 +446,16 @@ export default function CollectorDashboardPage() {
             <h1 className="text-2xl font-bold text-gray-900">{getGreeting()}, {user?.fullName || "Collector"} 👋</h1>
             <p className="text-sm text-green-600 italic mt-1">&ldquo;{quote}&rdquo;</p>
           </div>
-          <div className="text-right flex flex-col items-end gap-1">
-            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${isOnline ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-700"}`}>
+          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowRegisterModal(true)}
+              className="btn btn-primary text-sm w-full sm:w-auto"
+            >
+              ➕ Register New Customer
+            </button>
+            <div className="text-right flex flex-col items-end gap-1">
+              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${isOnline ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-700"}`}>
               <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-green-500" : "bg-yellow-500"}`}></span>
               {isOnline ? "Online" : "Offline"}
             </div>
@@ -408,6 +482,7 @@ export default function CollectorDashboardPage() {
                 {enrollingOffline ? "Enabling…" : "📱 Enable Offline"}
               </button>
             )}
+            </div>
           </div>
         </div>
       </div>
@@ -431,6 +506,70 @@ export default function CollectorDashboardPage() {
               {syncing ? "Syncing..." : "Sync Now"}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Today's Money — Cash Accountability */}
+      {data && (
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <span>💰</span> Today&apos;s Money
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-green-50 rounded-lg p-4">
+              <div className="text-xs text-green-600 font-medium">Today&apos;s Contributions</div>
+              <div className="text-2xl font-bold text-green-800 mt-1"><CediAmount amount={data.todayContributions} /></div>
+              <button
+                type="button"
+                className="mt-2 text-xs text-green-700 hover:underline flex items-center gap-1"
+                onClick={() => setError("")}
+              >
+                <span>ℹ️</span> Total customer payments you have successfully recorded today.
+              </button>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-4">
+              <div className="text-xs text-blue-600 font-medium">Expected to Bring In</div>
+              <div className="text-2xl font-bold text-blue-800 mt-1"><CediAmount amount={data.expectedToBringIn} /></div>
+              <button
+                type="button"
+                className="mt-2 text-xs text-blue-700 hover:underline flex items-center gap-1"
+              >
+                <span>ℹ️</span> Money from today&apos;s customer collections that you are expected to hand to the business.
+              </button>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-4">
+              <div className="text-xs text-purple-600 font-medium">Amount Handed In</div>
+              <div className="text-2xl font-bold text-purple-800 mt-1"><CediAmount amount={data.amountHandedInToday} /></div>
+              <button
+                type="button"
+                className="mt-2 text-xs text-purple-700 hover:underline flex items-center gap-1"
+              >
+                <span>ℹ️</span> Money you have already brought to the business today.
+              </button>
+            </div>
+            <div className={`rounded-lg p-4 ${data.difference >= 0 ? "bg-red-50" : "bg-green-50"}`}>
+              <div className="text-xs font-medium text-gray-600">Difference</div>
+              <div className={`text-2xl font-bold mt-1 ${data.difference >= 0 ? "text-red-700" : "text-green-700"}`}>
+                <CediAmount amount={Math.abs(data.difference)} />
+              </div>
+              <button
+                type="button"
+                className="mt-2 text-xs text-gray-700 hover:underline flex items-center gap-1"
+              >
+                <span>ℹ️</span> The difference between the money you are expected to bring in and the money you have handed in.
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100">
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-gray-500">Customers Collected</div>
+              <div className="text-xl font-bold text-green-700">{data.customersCollected}</div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-gray-500">Customers Remaining</div>
+              <div className="text-xl font-bold text-orange-600">{data.customersRemaining}</div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -650,6 +789,48 @@ export default function CollectorDashboardPage() {
                 {submitting ? "Recording..." : !isOnline && offlineEnabled ? (offlineAuthExpired ? "🔒 Reconnect Required" : "💾 Save on Device") : "✅ Record"}
               </button>
               <button onClick={() => { setRecordingFor(null); setCollectAmount(""); }} className="btn btn-secondary flex-1">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Register New Customer Modal */}
+      {showRegisterModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="bg-white rounded-t-2xl md:rounded-xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-2">Register New Customer</h3>
+            {!isOnline && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 mb-4 text-xs text-yellow-700">
+                ⚠️ You&apos;re offline. Customer registration requires an internet connection.
+              </div>
+            )}
+            <div className="form-group">
+              <label className="form-label">Full Name *</label>
+              <input type="text" value={regFullName} onChange={(e) => setRegFullName(e.target.value)} placeholder="Customer's full name" className="text-lg" disabled={!isOnline} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Phone</label>
+              <input type="tel" value={regPhone} onChange={(e) => setRegPhone(e.target.value)} placeholder="+233 XX XXX XXXX" disabled={!isOnline} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Address (optional)</label>
+              <input type="text" value={regAddress} onChange={(e) => setRegAddress(e.target.value)} placeholder="Customer's address" disabled={!isOnline} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Daily Contribution (GH₵) *</label>
+              <input type="number" step="0.01" min="0.01" value={regDailyContribution} onChange={(e) => setRegDailyContribution(e.target.value)} placeholder="e.g. 50" className="text-lg" disabled={!isOnline} />
+              <p className="form-hint">The amount the customer commits to save per day</p>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Card Fee (GH₵)</label>
+              <input type="number" step="0.01" min="0" value={regCardFee} onChange={(e) => setRegCardFee(e.target.value)} placeholder="10" disabled={!isOnline} />
+              <p className="form-hint">Standard card fee is GH₵10</p>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button onClick={handleRegisterCustomer} className="btn btn-primary flex-1" disabled={regSubmitting || !isOnline}>
+                {regSubmitting ? "Registering..." : "Register Customer"}
+              </button>
+              <button onClick={() => { setShowRegisterModal(false); setRegFullName(""); setRegPhone(""); setRegAddress(""); setRegDailyContribution(""); setRegCardFee("10"); }} className="btn btn-secondary flex-1">Cancel</button>
             </div>
           </div>
         </div>

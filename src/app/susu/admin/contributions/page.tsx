@@ -1,11 +1,12 @@
 "use client";
 import { getContributions, recordContribution } from "@/lib/actions/susu-contribution.actions";
-import { searchCustomers } from "@/lib/actions/susu-customer.actions";
+import { searchCustomers, searchStaff } from "@/lib/actions/susu-customer.actions";
 import { getCollectors } from "@/lib/actions/susu-collector.actions";
 import { formatCedi, formatDate, formatDateTime } from "@/lib/utils";
 import CediAmount from "@/components/CediAmount";
 import { useEffect, useState } from "react";
 import { isRedirectError } from "@/lib/errors";
+import SmartSearch from "@/components/SmartSearch";
 
 interface Contribution {
   id: string;
@@ -62,6 +63,7 @@ export default function SusuContributionsPage() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ id: string; fullName: string } | null>(null);
+  const [receivedById, setReceivedById] = useState("");
   const [receivedByName, setReceivedByName] = useState("");
 
   // Load current user for "Recorded By" field
@@ -145,9 +147,8 @@ export default function SusuContributionsPage() {
       return;
     }
 
-    const receivedByText = receivedByName.trim();
-    if (channel === "direct_office" && !receivedByText) {
-      setError("Please enter the name of the staff who received this payment.");
+    if (channel === "direct_office" && !receivedById) {
+      setError("Please select the staff who received this payment.");
       return;
     }
 
@@ -161,21 +162,24 @@ export default function SusuContributionsPage() {
         amount: amountNum,
         channel,
         collectorId: channel === "collector" ? selectedCollector : undefined,
-        receivedByName: channel === "direct_office" ? receivedByText : undefined,
+        receivedById: channel === "direct_office" ? receivedById : undefined,
         notes: notes || undefined,
       });
 
       if (result.success) {
+        const collectorName = collectors.find((c) => c.id === selectedCollector)?.user?.fullName || "";
+        const receivedByDisplay = channel === "direct_office" ? receivedByName : collectorName;
         setSuccess(
           channel === "direct_office"
-            ? `${formatCedi(amountNum)} recorded.\nReceived by ${receivedByText}.`
-            : `${formatCedi(amountNum)} recorded.\nCollected by ${collectors.find((c) => c.id === selectedCollector)?.user?.fullName || ""}.`
+            ? `${formatCedi(amountNum)} recorded.\nReceived by ${receivedByDisplay}.`
+            : `${formatCedi(amountNum)} recorded.\nCollected by ${collectorName}.`
         );
         setShowForm(false);
         setSelectedCustomer(null);
         setSearchQuery("");
         setAmount("");
         setNotes("");
+        setReceivedById("");
         setReceivedByName("");
         loadContributions();
       } else {
@@ -349,21 +353,27 @@ export default function SusuContributionsPage() {
               <>
                 <div className="form-group">
                   <label className="form-label">Received By *</label>
-                  <input
-                    type="text"
-                    placeholder="Type the name of the staff who received this payment"
-                    value={receivedByName}
-                    onChange={(e) => setReceivedByName(e.target.value)}
+                  <SmartSearch
+                    label=""
+                    placeholder="Search staff by name, email, or phone..."
+                    searchFn={searchStaff}
+                    onSelect={(option) => {
+                      setReceivedById(option.id);
+                      setReceivedByName(option.label);
+                    }}
+                    selectedOption={receivedById ? { id: receivedById, label: receivedByName } : null}
+                    minQueryLength={2}
+                    debounceMs={200}
                   />
                   <p className="form-hint text-xs mt-1">
-                    Enter the name of the person who physically received the money at the office.
+                    The person who physically received the customer&apos;s money.
                   </p>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Recorded By</label>
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                     <div className="font-medium text-gray-900">{currentUser?.fullName || "Loading..."}</div>
-                    <p className="form-hint text-xs mt-1">You are recording this payment under your account.</p>
+                    <p className="form-hint text-xs mt-1">This is the account currently being used to enter the payment.</p>
                   </div>
                 </div>
               </>
@@ -442,6 +452,7 @@ export default function SusuContributionsPage() {
                     <th>Days Covered</th>
                     <th>Channel</th>
                     <th>Received By</th>
+                    <th>Recorded By</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -462,9 +473,12 @@ export default function SusuContributionsPage() {
                         </span>
                       </td>
                       <td className="text-sm">
-                      {c.channel === "collector"
-                        ? `Collected by ${c.collector?.user?.fullName || "—"}`
-                        : `Received by ${c.receivedByName || c.receivedBy?.fullName || "—"}${c.recordedBy?.fullName ? ` (recorded by ${c.recordedBy.fullName})` : ""}`}
+                        {c.channel === "collector"
+                          ? c.collector?.user?.fullName || "—"
+                          : c.receivedByName || c.receivedBy?.fullName || "Not recorded"}
+                      </td>
+                      <td className="text-sm">
+                        {c.recordedBy?.fullName || "Not recorded"}
                       </td>
                     </tr>
                   ))}

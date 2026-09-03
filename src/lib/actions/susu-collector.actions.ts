@@ -433,3 +433,161 @@ export async function getRemittances(params?: {
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   };
 }
+
+/**
+ * Register a new customer by a collector.
+ * The customer is automatically assigned to the authenticated collector.
+ * Only accessible by users with the collector role.
+ */
+export async function registerCustomerByCollector(params: {
+  fullName: string;
+  phone?: string;
+  address?: string;
+  dailyContribution: number;
+  cardFee?: number;
+}): Promise<ActionResponse> {
+  const user = await requireAuth();
+
+  // Verify the user is actually a collector
+  if (user.role !== "collector") {
+    return { success: false, error: "Only collectors can register customers" };
+  }
+
+  // Get the collector record
+  const collector = await db.collector.findUnique({
+    where: { userId: user.userId },
+  });
+
+  if (!collector) {
+    return { success: false, error: "Collector record not found" };
+  }
+
+  if (collector.status !== "active") {
+    return { success: false, error: "Collector account is not active" };
+  }
+
+  const { fullName, phone, address, dailyContribution, cardFee = 10 } = params;
+
+  if (!fullName || fullName.length < 2) {
+    return { success: false, error: "Full name must be at least 2 characters" };
+  }
+  if (!dailyContribution || dailyContribution <= 0) {
+    return { success: false, error: "Daily contribution must be greater than 0" };
+  }
+
+  // Check for potential duplicate customer based on phone
+  if (phone) {
+    const normalizedPhone = phone.replace(/[^\d]/g, "");
+    if (normalizedPhone.length >= 9) {
+      const existingCustomer = await db.customer.findFirst({
+        where: {
+          phone: { contains: normalizedPhone.slice(-9) },
+          status: "active",
+        },
+      });
+      if (existingCustomer) {
+        return {
+          success: false,
+          error:
+            "A customer with this phone number already exists. Please check before creating another account.",
+        };
+      }
+    }
+  }
+
+  // Generate IDs
+  const customerCount = await db.customer.count();
+  const customerId = `BIK-C-${String(customerCount + 1).padStart(6, "0")}`;
+  const accountId = `BIK-S-${String(customerCount + 1).padStart(6, "0")}`;
+
+  // Create customer, account, cycle, and assignment in a transaction
+  const result = await db.$transaction(async (tx) => {
+    // Create customer
+    const customer = await tx.customer.create({
+      data: {
+        customerId,
+        fullName,
+        phone,
+        address,
+        status: "active",
+      },
+    });
+
+    // Create Susu account
+    const susuAccount = await tx.susuAccount.create({
+      data: {
+        accountId,
+        customerId: customer.id,
+        dailyContribution,
+        status: "active",
+        cardCustody: "customer",
+      },
+    });
+
+    // Create first cycle
+    const now = new Date();
+    const cycleStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const cycleEnd = new Date(now.getFullYear(), now.getMonth(), 31);
+
+    await tx.susuCycle.create({
+      data: {
+        accountId: susuAccount.id,
+        cycleNumber: 1,
+        startDate: cycleStart,
+        endDate: cycleEnd,
+        dailyContribution,
+        status: "active",
+        commissionCharged: false,
+      },
+    });
+
+    // Record card fee
+    await tx.cardFee.create({
+      data: {
+        accountId: susuAccount.id,
+        amount: cardFee,
+        recordedById: user.userId,
+        notes: "Initial card purchase",
+      },
+    });
+
+    // Create collector assignment
+    await tx.collectorCustomerAssignment.create({
+      data: {
+        collectorId: collector.id,
+        customerId: customer.id,
+        accountId: susuAccount.id,
+        active: true,
+      },
+    });
+
+    return { customer, susuAccount };
+  });
+
+  // Audit log
+  await createAuditLog({
+    userId: user.userId,
+    action: "susu.customer_created_by_collector",
+    entityType: "customer",
+    entityId: result.customer.id,
+    details: {
+      customerId: result.customer.customerId,
+      fullName: result.customer.fullName,
+      dailyContribution,
+      collectorId: collector.id,
+      collectorName: user.fullName,
+    },
+  });
+
+  revalidatePath("/collector/dashboard");
+  revalidatePath("/susu/admin/customers");
+
+  return {
+    success: true,
+    data: {
+      customer: result.customer,
+      susuAccount: result.susuAccount,
+      collectorId: collector.id,
+    },
+  };
+}

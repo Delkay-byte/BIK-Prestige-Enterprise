@@ -13,24 +13,44 @@ export async function getSusuDashboardStats() {
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
+  // Today's contributions (all channels)
+  const todayContributions = await db.contribution.aggregate({
+    where: { collectionDate: { gte: today, lt: tomorrow } },
+    _sum: { amount: true },
+    _count: true,
+  });
+
+  // Collector-channel contributions only
+  const todayCollectorContributions = await db.contribution.aggregate({
+    where: {
+      channel: "collector",
+      collectionDate: { gte: today, lt: tomorrow },
+    },
+    _sum: { amount: true },
+    _count: true,
+  });
+
+  // Office contributions only
+  const todayOfficeContributions = await db.contribution.aggregate({
+    where: {
+      channel: "direct_office",
+      collectionDate: { gte: today, lt: tomorrow },
+    },
+    _sum: { amount: true },
+    _count: true,
+  });
+
   const [
     activeCustomers,
     activeCollectors,
-    todayContributions,
     todayWithdrawals,
     todayCommissions,
     todayCardFees,
-    pendingRemittances,
     totalCustomers,
     paidTodayCustomers,
   ] = await Promise.all([
     db.customer.count({ where: { status: "active" } }),
     db.collector.count({ where: { status: "active" } }),
-    db.contribution.aggregate({
-      where: { collectionDate: { gte: today, lt: tomorrow } },
-      _sum: { amount: true },
-      _count: true,
-    }),
     db.withdrawal.aggregate({
       where: { createdAt: { gte: today, lt: tomorrow }, status: "completed" },
       _sum: { requestedAmount: true, commissionAmount: true, netAmount: true },
@@ -43,11 +63,6 @@ export async function getSusuDashboardStats() {
     db.cardFee.aggregate({
       _sum: { amount: true },
     }),
-    db.collectorRemittance.aggregate({
-      where: { status: "pending" },
-      _sum: { expectedAmount: true, remittedAmount: true },
-      _count: true,
-    }),
     db.customer.count(),
     db.contribution.findMany({
       where: { collectionDate: { gte: today, lt: tomorrow } },
@@ -55,6 +70,17 @@ export async function getSusuDashboardStats() {
       distinct: ["accountId"],
     }),
   ]);
+
+  // Pending Money Handed In: sum of (expectedAmount - remittedAmount) for all pending remittances
+  // This represents money from collector collections that has not yet been recorded as handed in
+  const pendingRemittancesData = await db.collectorRemittance.findMany({
+    where: { status: { in: ["pending", "discrepancy"] } },
+    select: { expectedAmount: true, remittedAmount: true },
+  });
+  const pendingMoneyHandedIn = pendingRemittancesData.reduce(
+    (sum, r) => sum + Number(r.expectedAmount) - Number(r.remittedAmount),
+    0
+  );
 
   const outstandingToday = activeCustomers - paidTodayCustomers.length;
 
@@ -66,13 +92,17 @@ export async function getSusuDashboardStats() {
     outstandingToday,
     todayContributions: Number(todayContributions._sum.amount || 0),
     todayContributionCount: todayContributions._count,
+    todayCollectorContributions: Number(todayCollectorContributions._sum.amount || 0),
+    todayCollectorContributionCount: todayCollectorContributions._count,
+    todayOfficeContributions: Number(todayOfficeContributions._sum.amount || 0),
+    todayOfficeContributionCount: todayOfficeContributions._count,
     todayWithdrawals: Number(todayWithdrawals._sum.requestedAmount || 0),
     todayWithdrawalCount: todayWithdrawals._count,
     todayCommission: Number(todayCommissions._sum.amount || 0),
     todayNetPaid: Number(todayWithdrawals._sum.netAmount || 0),
     totalCardFees: Number(todayCardFees._sum.amount || 0),
-    pendingRemittances: Number(pendingRemittances._sum.expectedAmount || 0) - Number(pendingRemittances._sum.remittedAmount || 0),
-    pendingRemittanceCount: pendingRemittances._count,
+    pendingMoneyHandedIn: Math.max(0, pendingMoneyHandedIn),
+    pendingRemittanceCount: pendingRemittancesData.length,
   };
 }
 
@@ -116,8 +146,21 @@ export async function getCollectorDashboardStats(collectorUserId: string) {
     },
   });
 
-  // Fetch today's contributions for this collector (any channel — including office)
-  const todayContributions = await db.contribution.findMany({
+  // Fetch today's contributions for this collector (collector channel only for cash accountability)
+  const todayCollectorContributions = await db.contribution.findMany({
+    where: {
+      collectorId: collector.id,
+      channel: "collector",
+      collectionDate: { gte: today, lt: tomorrow },
+    },
+    include: {
+      allocations: true,
+    },
+    orderBy: { collectionDate: "desc" },
+  });
+
+  // Also fetch all today's contributions for TO VISIT / COLLECTED TODAY display (any channel)
+  const todayAllContributions = await db.contribution.findMany({
     where: {
       collectionDate: { gte: today, lt: tomorrow },
     },
@@ -127,9 +170,9 @@ export async function getCollectorDashboardStats(collectorUserId: string) {
     orderBy: { collectionDate: "desc" },
   });
 
-  // Index today's contributions by accountId for quick lookup
-  const todayByAccount = new Map<string, typeof todayContributions>();
-  for (const c of todayContributions) {
+  // Index today's all contributions by accountId for quick lookup
+  const todayByAccount = new Map<string, typeof todayAllContributions>();
+  for (const c of todayAllContributions) {
     const existing = todayByAccount.get(c.accountId) || [];
     existing.push(c);
     todayByAccount.set(c.accountId, existing);
@@ -201,7 +244,28 @@ export async function getCollectorDashboardStats(collectorUserId: string) {
     }
   }
 
-  // Fetch recent money handed in
+  // Calculate cash accountability metrics
+  const todayContributionsAmount = todayCollectorContributions.reduce(
+    (sum, c) => sum + Number(c.amount),
+    0
+  );
+
+  // Amount Handed In today (remittances recorded today)
+  const todayRemittances = await db.collectorRemittance.findMany({
+    where: {
+      collectorId: collector.id,
+      createdAt: { gte: today, lt: tomorrow },
+    },
+  });
+  const amountHandedInToday = todayRemittances.reduce(
+    (sum, r) => sum + Number(r.remittedAmount),
+    0
+  );
+
+  const expectedToBringIn = todayContributionsAmount;
+  const difference = expectedToBringIn - amountHandedInToday;
+
+  // Fetch recent money handed in (last 5)
   const recentRemittances = await db.collectorRemittance.findMany({
     where: { collectorId: collector.id },
     orderBy: { createdAt: "desc" },
@@ -222,5 +286,78 @@ export async function getCollectorDashboardStats(collectorUserId: string) {
       status: r.status,
       createdAt: r.createdAt.toISOString(),
     })),
+    // Cash accountability
+    todayContributions: todayContributionsAmount,
+    expectedToBringIn,
+    amountHandedInToday,
+    difference,
+    customersCollected: collectedToday.length,
+    customersRemaining: toVisit.length,
   };
+}
+
+/**
+ * Get collector breakdown for admin dashboard.
+ * Returns cash accountability metrics per collector.
+ */
+export async function getAdminCollectorBreakdown() {
+  await requireAdmin();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+  const collectors = await db.collector.findMany({
+    where: { status: "active" },
+    include: {
+      user: { select: { id: true, fullName: true } },
+    },
+  });
+
+  const breakdown = await Promise.all(
+    collectors.map(async (collector) => {
+      // Today's collector contributions
+      const todayContributions = await db.contribution.findMany({
+        where: {
+          collectorId: collector.id,
+          channel: "collector",
+          collectionDate: { gte: today, lt: tomorrow },
+        },
+        select: { amount: true },
+      });
+
+      const todayContributionsAmount = todayContributions.reduce(
+        (sum, c) => sum + Number(c.amount),
+        0
+      );
+
+      // Amount Handed In today
+      const todayRemittances = await db.collectorRemittance.findMany({
+        where: {
+          collectorId: collector.id,
+          createdAt: { gte: today, lt: tomorrow },
+        },
+        select: { remittedAmount: true },
+      });
+      const amountHandedInToday = todayRemittances.reduce(
+        (sum, r) => sum + Number(r.remittedAmount),
+        0
+      );
+
+      // Expected to Bring In = today's collector contributions
+      const expectedToBringIn = todayContributionsAmount;
+      const difference = expectedToBringIn - amountHandedInToday;
+
+      return {
+        collectorId: collector.id,
+        collectorName: collector.user.fullName,
+        todayContributions: todayContributionsAmount,
+        expectedToBringIn,
+        amountHandedInToday,
+        difference,
+      };
+    })
+  );
+
+  return breakdown;
 }

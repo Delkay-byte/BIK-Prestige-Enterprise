@@ -357,9 +357,57 @@ export async function reassignCustomer(params: {
   });
 
   revalidatePath("/susu/admin/customers");
-  revalidatePath(`/susu/admin/customers/${customerId}`);
-  revalidatePath("/susu/admin/collectors");
+revalidatePath(`/susu/admin/customers/${customerId}`);
+  revalidatePath("/susu/admin/customers");
   return { success: true };
+}
+
+export async function searchStaff(query: string) {
+  await requireAuth();
+
+  if (!query || query.length < 2) return [];
+
+  const normalizedQuery = query.trim().toLowerCase();
+
+  // For SQLite, fetch broader results and filter in-memory for case-insensitive matching
+  const candidates = await db.user.findMany({
+    where: {
+      OR: [
+        { fullName: { contains: normalizedQuery } },
+        { email: { contains: normalizedQuery } },
+        { phone: { contains: normalizedQuery } },
+      ],
+      status: "active",
+      role: { in: ["admin", "worker", "collector"] },
+    },
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      phone: true,
+      role: true,
+    },
+    take: 50,
+  });
+
+  // Filter in-memory for case-insensitive matching
+  return candidates
+    .filter((u) => {
+      const nameLower = u.fullName.toLowerCase();
+      const emailLower = u.email.toLowerCase();
+      const phoneLower = (u.phone || "").toLowerCase();
+      return (
+        nameLower.includes(normalizedQuery) ||
+        emailLower.includes(normalizedQuery) ||
+        phoneLower.includes(normalizedQuery)
+      );
+    })
+    .slice(0, 20)
+    .map((u) => ({
+      id: u.id,
+      label: u.fullName,
+      subLabel: `${u.role} • ${u.email}${u.phone ? ` • ${u.phone}` : ""}`,
+    }));
 }
 
 export async function searchCustomers(query: string) {
@@ -367,22 +415,16 @@ export async function searchCustomers(query: string) {
 
   if (!query || query.length < 2) return [];
 
-  // For SQLite, contains() is case-sensitive. We fetch more results
-  // and filter in-memory for case-insensitive matching.
   const normalizedQuery = query.trim().toLowerCase();
   const phoneCandidates = normalizeGhanaPhone(query);
 
-  // Fetch candidates with a broader match (lowercase the query for SQLite LIKE)
+  // For SQLite, fetch broader results and filter in-memory for case-insensitive matching
   const candidates = await db.customer.findMany({
     where: {
       OR: [
         { fullName: { contains: normalizedQuery } },
         { customerId: { contains: normalizedQuery } },
         { phone: { contains: normalizedQuery } },
-        // Also try uppercase variant for SQLite case sensitivity
-        { fullName: { contains: normalizedQuery.toUpperCase() } },
-        { customerId: { contains: normalizedQuery.toUpperCase() } },
-        // Match phone in any canonical Ghanaian form (024... / +233...)
         ...(phoneCandidates.length ? [{ phone: { in: phoneCandidates } }] : []),
       ],
       status: "active",
@@ -395,23 +437,25 @@ export async function searchCustomers(query: string) {
         },
       },
     },
-    take: 20,
+    take: 50,
   });
 
-  // Deduplicate and apply case-insensitive filter
+  // Filter in-memory for case-insensitive matching
   const seen = new Set<string>();
-  return candidates.filter((c) => {
-    if (seen.has(c.id)) return false;
-    const nameLower = c.fullName.toLowerCase();
-    const idLower = c.customerId.toLowerCase();
-    const phoneLower = (c.phone || "").toLowerCase();
-    const matches =
-      nameLower.includes(normalizedQuery) ||
-      idLower.includes(normalizedQuery) ||
-      phoneLower.includes(normalizedQuery);
-    if (matches) seen.add(c.id);
-    return matches;
-  }).slice(0, 10);
+  return candidates
+    .filter((c) => {
+      if (seen.has(c.id)) return false;
+      const nameLower = c.fullName.toLowerCase();
+      const idLower = c.customerId.toLowerCase();
+      const phoneLower = (c.phone || "").toLowerCase();
+      const matches =
+        nameLower.includes(normalizedQuery) ||
+        idLower.includes(normalizedQuery) ||
+        phoneLower.includes(normalizedQuery);
+      if (matches) seen.add(c.id);
+      return matches;
+    })
+    .slice(0, 10);
 }
 
 export async function getCustomerAccount() {

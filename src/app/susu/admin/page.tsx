@@ -2,8 +2,9 @@
 import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
-import { getSusuDashboardStats } from "@/lib/actions/susu-dashboard.actions";
+import { getSusuDashboardStats, getAdminCollectorBreakdown } from "@/lib/actions/susu-dashboard.actions";
 import CediAmount from "@/components/CediAmount";
+import InfoTooltip from "@/components/InfoTooltip";
 
 interface DashboardStats {
   activeCustomers: number;
@@ -13,24 +14,42 @@ interface DashboardStats {
   outstandingToday: number;
   todayContributions: number;
   todayContributionCount: number;
+  todayCollectorContributions: number;
+  todayCollectorContributionCount: number;
+  todayOfficeContributions: number;
+  todayOfficeContributionCount: number;
   todayWithdrawals: number;
   todayWithdrawalCount: number;
   todayCommission: number;
   todayNetPaid: number;
   totalCardFees: number;
-  pendingRemittances: number;
+  pendingMoneyHandedIn: number;
   pendingRemittanceCount: number;
+}
+
+interface CollectorBreakdown {
+  collectorId: string;
+  collectorName: string;
+  todayContributions: number;
+  expectedToBringIn: number;
+  amountHandedInToday: number;
+  difference: number;
 }
 
 export default function SusuAdminOverviewPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [collectorBreakdown, setCollectorBreakdown] = useState<CollectorBreakdown[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   async function loadStats() {
     try {
-      const data = await getSusuDashboardStats();
+      const [data, breakdown] = await Promise.all([
+        getSusuDashboardStats(),
+        getAdminCollectorBreakdown(),
+      ]);
       setStats(data);
+      setCollectorBreakdown(breakdown);
     } catch (err) { if (isRedirectError(err)) throw err;
       setError("Failed to load dashboard data");
     } finally {
@@ -68,7 +87,7 @@ export default function SusuAdminOverviewPage() {
     { label: "Today's Withdrawals", value: stats.todayWithdrawals, icon: "🏧", color: "bg-orange-50" },
     { label: "Today's Commission", value: stats.todayCommission, icon: "💼", color: "bg-purple-50" },
     { label: "Card Fee Income", value: stats.totalCardFees, icon: "💳", color: "bg-indigo-50" },
-    { label: "Pending Remittances", value: stats.pendingRemittances, icon: "🏦", color: stats.pendingRemittances > 0 ? "bg-red-50" : "bg-green-50" },
+    { label: "Pending Money Handed In", value: stats.pendingMoneyHandedIn, icon: "🏦", color: stats.pendingMoneyHandedIn > 0 ? "bg-red-50" : "bg-green-50" },
   ];
 
   return (
@@ -96,7 +115,10 @@ export default function SusuAdminOverviewPage() {
             <div className="flex items-center gap-3">
               <span className="text-2xl">{card.icon}</span>
               <div>
-                <div className="text-sm text-gray-500">{card.label}</div>
+                <div className="flex items-center gap-1 text-sm text-gray-500">
+                  {card.label}
+                  <InfoTooltip text="Total successful contributions across all channels today." />
+                </div>
                 <div className="text-xl font-bold"><CediAmount amount={card.value} /></div>
               </div>
             </div>
@@ -110,12 +132,58 @@ export default function SusuAdminOverviewPage() {
             <div className="flex items-center gap-3">
               <span className="text-2xl">{card.icon}</span>
               <div>
-                <div className="text-sm text-gray-500">{card.label}</div>
+                <div className="flex items-center gap-1 text-sm text-gray-500">
+                  {card.label}
+                  {card.label === "Pending Money Handed In" && (
+                    <InfoTooltip text="Money from collector collections that has not yet been recorded as handed in." />
+                  )}
+                </div>
                 <div className="text-xl font-bold"><CediAmount amount={card.value} /></div>
               </div>
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Collector Breakdown */}
+      <div className="card mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          Collector Cash Accountability
+          <InfoTooltip text="Per-collector breakdown of today's collections and money handed in." />
+        </h2>
+        {collectorBreakdown.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <p className="text-4xl mb-2">🚶</p>
+            <p className="font-medium">No active collectors</p>
+          </div>
+        ) : (
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Collector</th>
+                  <th className="text-right">Today&apos;s Contributions</th>
+                  <th className="text-right">Expected to Bring In</th>
+                  <th className="text-right">Amount Handed In</th>
+                  <th className="text-right">Difference</th>
+                </tr>
+              </thead>
+              <tbody>
+                {collectorBreakdown.map((c) => (
+                  <tr key={c.collectorId}>
+                    <td className="font-medium">{c.collectorName}</td>
+                    <td className="text-right font-mono"><CediAmount amount={c.todayContributions} /></td>
+                    <td className="text-right font-mono"><CediAmount amount={c.expectedToBringIn} /></td>
+                    <td className="text-right font-mono"><CediAmount amount={c.amountHandedInToday} /></td>
+                    <td className={`text-right font-mono font-semibold ${c.difference >= 0 ? "text-red-600" : "text-green-600"}`}>
+                      <CediAmount amount={Math.abs(c.difference)} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Quick Info */}
