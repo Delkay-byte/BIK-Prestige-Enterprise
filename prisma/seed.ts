@@ -52,7 +52,7 @@ async function main() {
     const created = await prisma.user.upsert({
       where: { email: w.email },
       update: {},
-      create: { email: w.email, fullName: w.fullName, phone: w.phone, role: "worker", status: "active", passwordHash: workerPassword, locationId: createdLocations[w.locationIndex].id },
+      create: { email: w.email, fullName: w.fullName, phone: w.phone, role: "worker", status: "active", passwordHash: workerPassword, locationId: createdLocations[w.locationIndex].id, momoEnabled: true },
     });
     console.log(`✅ Worker: ${created.fullName} → ${createdLocations[w.locationIndex].name}`);
   }
@@ -91,7 +91,7 @@ async function main() {
     const user = await prisma.user.upsert({
       where: { email: c.email },
       update: {},
-      create: { email: c.email, fullName: c.fullName, phone: c.phone, role: "collector", status: "active", passwordHash: collectorPassword },
+      create: { email: c.email, fullName: c.fullName, phone: c.phone, role: "collector", status: "active", passwordHash: collectorPassword, susuEnabled: true },
     });
     const collector = await prisma.collector.upsert({
       where: { userId: user.id },

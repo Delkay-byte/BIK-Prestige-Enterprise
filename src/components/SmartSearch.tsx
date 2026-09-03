@@ -13,6 +13,7 @@ interface SmartSearchProps {
   placeholder?: string;
   searchFn: (query: string) => Promise<SearchOption[]>;
   onSelect: (option: SearchOption) => void;
+  onClear?: () => void;
   selectedOption?: SearchOption | null;
   minQueryLength?: number;
   debounceMs?: number;
@@ -25,6 +26,7 @@ export default function SmartSearch({
   placeholder = "Search...",
   searchFn,
   onSelect,
+  onClear,
   selectedOption,
   minQueryLength = 2,
   debounceMs = 200,
@@ -110,6 +112,7 @@ export default function SmartSearch({
     setShowResults(true);
     if (selectedOption && value !== selectedOption.label) {
       // Clear selection if user types something different
+      onClear?.();
     }
   };
 

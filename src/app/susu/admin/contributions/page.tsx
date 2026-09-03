@@ -66,7 +66,6 @@ export default function SusuContributionsPage() {
   const [currentUser, setCurrentUser] = useState<{ id: string; fullName: string } | null>(null);
   const [receivedById, setReceivedById] = useState("");
   const [receivedByName, setReceivedByName] = useState("");
-  const [recordedByName, setRecordedByName] = useState("");
 
   // Prefill "Recorded By" with the account currently being used to enter the
   // payment (the admin session — this page lives under /susu/admin/*). The
@@ -82,7 +81,6 @@ export default function SusuContributionsPage() {
           if (authUser?.userId) {
             const fullName = authUser.fullName || "Current User";
             setCurrentUser({ id: authUser.userId, fullName });
-            setRecordedByName(fullName);
           }
         }
       } catch {
@@ -170,7 +168,7 @@ export default function SusuContributionsPage() {
         channel,
         collectorId: channel === "collector" ? selectedCollector : undefined,
         receivedById: channel === "direct_office" ? receivedById : undefined,
-        recordedByName: recordedByName.trim() || undefined,
+        recordedByName: currentUser?.fullName || undefined,
         notes: notes || undefined,
       });
 
@@ -189,7 +187,6 @@ export default function SusuContributionsPage() {
         setNotes("");
         setReceivedById("");
         setReceivedByName("");
-        setRecordedByName(currentUser?.fullName || "");
         loadContributions();
       } else {
         setError(result.error || "Failed to record contribution");
@@ -251,8 +248,6 @@ export default function SusuContributionsPage() {
           <button
             onClick={() => {
               setShowForm(!showForm);
-              // Re-prefill the recorder with the signed-in account when opening
-              if (!showForm) setRecordedByName(currentUser?.fullName || "");
             }}
             className="btn btn-primary"
           >
@@ -377,6 +372,10 @@ export default function SusuContributionsPage() {
                       setReceivedById(option.id);
                       setReceivedByName(option.label);
                     }}
+                    onClear={() => {
+                      setReceivedById("");
+                      setReceivedByName("");
+                    }}
                     selectedOption={receivedById ? { id: receivedById, label: receivedByName } : null}
                     minQueryLength={2}
                     debounceMs={200}
@@ -387,16 +386,12 @@ export default function SusuContributionsPage() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Recorded By</label>
-                  <input
-                    type="text"
-                    value={recordedByName}
-                    onChange={(e) => setRecordedByName(e.target.value)}
-                    placeholder="Name of the person recording this payment"
-                  />
-                  <p className="form-hint text-xs mt-1">
-                    The person recording this payment. Prefilled with your account ({currentUser?.fullName || "..."});
-                    change it if someone else is entering the payment.
-                  </p>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <div className="font-medium text-gray-900">{currentUser?.fullName || "Loading..."}</div>
+                    <p className="form-hint text-xs mt-1">
+                      This is the account currently being used to enter the payment. It cannot be changed.
+                    </p>
+                  </div>
                 </div>
               </>
             )}
