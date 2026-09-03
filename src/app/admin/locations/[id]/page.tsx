@@ -1,5 +1,5 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -20,6 +20,7 @@ export default function LocationDetailPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const handleRedirect = useRedirectHandler();
 
   useEffect(() => { loadLocation(); }, [params.id]);
 
@@ -35,7 +36,7 @@ export default function LocationDetailPage() {
       const result = await updateLocation(params.id as string, formData);
       if (result.success) { setSuccess("Location updated successfully"); setEditing(false); loadLocation(); }
       else setError(result.error || "Failed to update location");
-    } catch (err) { if (isRedirectError(err)) throw err; setError("An unexpected error occurred"); }
+    } catch (err) { if (handleRedirect(err, setError, "An unexpected error occurred")) return; }
     finally { setSubmitting(false); }
   }
 
@@ -46,7 +47,7 @@ export default function LocationDetailPage() {
       const result = await toggleLocationStatus(location.id, newStatus);
       if (result.success) loadLocation();
       else setError(result.error || "Failed to update status");
-    } catch (err) { if (isRedirectError(err)) throw err; setError("An unexpected error occurred"); }
+    } catch (err) { if (handleRedirect(err, setError, "An unexpected error occurred")) return; }
   }
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="spinner"></div></div>;

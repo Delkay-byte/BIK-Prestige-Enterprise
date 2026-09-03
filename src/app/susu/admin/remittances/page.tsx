@@ -1,7 +1,7 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 import {
   getRemittances,
   recordRemittance,
@@ -27,6 +27,7 @@ interface CollectorOption {
 }
 
 export default function SusuRemittancesPage() {
+  const handleRedirect = useRedirectHandler();
   const [remittances, setRemittances] = useState<RemittanceRecord[]>([]);
   const [collectors, setCollectors] = useState<CollectorOption[]>([]);
   const [pagination, setPagination] = useState<{ page: number; totalPages: number; total: number } | null>(null);
@@ -56,8 +57,7 @@ export default function SusuRemittancesPage() {
       const result = await getRemittances({ page, limit: 15 });
       setRemittances(result.remittances as unknown as RemittanceRecord[]);
       setPagination(result.pagination);
-    } catch (err) { if (isRedirectError(err)) throw err;
-      /* ignore */
+    } catch (err) { if (handleRedirect(err, setError, "Failed to load remittances")) return;
     } finally {
       setLoading(false);
     }
@@ -67,8 +67,7 @@ export default function SusuRemittancesPage() {
     try {
       const data = await getCollectors();
       setCollectors(data as unknown as CollectorOption[]);
-    } catch (err) { if (isRedirectError(err)) throw err;
-      /* ignore */
+    } catch (err) { if (handleRedirect(err, setError, "Failed to load collectors")) return;
     }
   }
 
@@ -108,7 +107,7 @@ export default function SusuRemittancesPage() {
       } else {
         setError(result.error || "Failed to record remittance");
       }
-    } catch (err) { if (isRedirectError(err)) throw err;
+    } catch (err) { if (handleRedirect(err, setError, "An unexpected error occurred")) return;
       setError("An unexpected error occurred");
     } finally {
       setSubmitting(false);

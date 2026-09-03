@@ -1,5 +1,5 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 
 import { useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/utils";
@@ -49,6 +49,7 @@ export default function AuditLogPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const limit = 30;
+  const handleRedirect = useRedirectHandler();
 
   async function loadLogs() {
     setLoading(true);
@@ -59,9 +60,7 @@ export default function AuditLogPage() {
         setLogs(data.logs);
         setTotal(data.total);
       }
-    } catch (err) { if (isRedirectError(err)) throw err;
-      /* ignore */
-    } finally {
+    } catch (err) { if (handleRedirect(err, () => {}, "")) return; } finally {
       setLoading(false);
     }
   }

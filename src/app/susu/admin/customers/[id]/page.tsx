@@ -1,5 +1,5 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -71,6 +71,7 @@ interface Collector {
 }
 
 export default function SusuCustomerDetailPage() {
+  const handleRedirect = useRedirectHandler();
   const params = useParams();
   const router = useRouter();
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
@@ -110,8 +111,7 @@ export default function SusuCustomerDetailPage() {
       setCustomer(customerData as unknown as CustomerDetail);
       setCollectors(collectorData as unknown as Collector[]);
     } catch (err) {
-      if (isRedirectError(err)) throw err;
-      setError("Failed to load customer");
+      if (handleRedirect(err, setError, "Failed to load customer")) return;
     } finally {
       setLoading(false);
     }
@@ -142,8 +142,7 @@ export default function SusuCustomerDetailPage() {
         setError(result.error || "Failed to create portal access");
       }
     } catch (err) {
-      if (isRedirectError(err)) throw err;
-      setError("An unexpected error occurred");
+      if (handleRedirect(err, setError, "An unexpected error occurred")) return;
     } finally {
       setPortalProvisioning(false);
     }
@@ -176,8 +175,7 @@ export default function SusuCustomerDetailPage() {
         setError(result.error || "Failed to reset password");
       }
     } catch (err) {
-      if (isRedirectError(err)) throw err;
-      setError("An unexpected error occurred");
+      if (handleRedirect(err, setError, "An unexpected error occurred")) return;
     } finally {
       setResettingPassword(false);
     }
@@ -197,8 +195,7 @@ export default function SusuCustomerDetailPage() {
         setError(result.error || "Failed to toggle portal");
       }
     } catch (err) {
-      if (isRedirectError(err)) throw err;
-      setError("An unexpected error occurred");
+      if (handleRedirect(err, setError, "An unexpected error occurred")) return;
     } finally {
       setPortalProvisioning(false);
     }
@@ -230,8 +227,7 @@ export default function SusuCustomerDetailPage() {
         setError(result.error || "Failed to reassign customer");
       }
     } catch (err) {
-      if (isRedirectError(err)) throw err;
-      setError("An unexpected error occurred");
+      if (handleRedirect(err, setError, "An unexpected error occurred")) return;
     } finally {
       setReassigning(false);
     }

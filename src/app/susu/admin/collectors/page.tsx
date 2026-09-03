@@ -1,7 +1,7 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
 
 import { Fragment, useEffect, useState } from "react";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 import {
   getCollectors,
   createCollector,
@@ -26,6 +26,7 @@ interface CollectorData {
 interface LocationOption { id: string; name: string; code: string; }
 
 export default function SusuCollectorsPage() {
+  const handleRedirect = useRedirectHandler();
   const [collectors, setCollectors] = useState<CollectorData[]>([]);
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,8 +48,7 @@ export default function SusuCollectorsPage() {
       const [data, locs] = await Promise.all([getCollectors(), getActiveLocations().catch(() => [])]);
       setCollectors(data as unknown as CollectorData[]);
       setLocations(locs as unknown as LocationOption[]);
-    } catch (err) { if (isRedirectError(err)) throw err;
-      setError("Failed to load collectors");
+    } catch (err) { if (handleRedirect(err, setError, "Failed to load collectors")) return;
     } finally {
       setLoading(false);
     }
@@ -67,8 +67,7 @@ export default function SusuCollectorsPage() {
       } else {
         setError(result.error || "Failed to create collector");
       }
-    } catch (err) { if (isRedirectError(err)) throw err;
-      setError("An unexpected error occurred");
+    } catch (err) { if (handleRedirect(err, setError, "An unexpected error occurred")) return;
     } finally {
       setSubmitting(false);
     }
@@ -92,8 +91,7 @@ export default function SusuCollectorsPage() {
       } else {
         setError(result.error || "Failed to reset password");
       }
-    } catch (err) { if (isRedirectError(err)) throw err;
-      setError("An unexpected error occurred");
+    } catch (err) { if (handleRedirect(err, setError, "An unexpected error occurred")) return;
     } finally {
       setSubmitting(false);
       setShowReauth(false);
@@ -114,8 +112,7 @@ export default function SusuCollectorsPage() {
       } else {
         setError(result.error || "Failed to update MoMo capability");
       }
-    } catch (err) { if (isRedirectError(err)) throw err;
-      setError("An unexpected error occurred");
+    } catch (err) { if (handleRedirect(err, setError, "An unexpected error occurred")) return;
     } finally {
       setSubmitting(false);
     }

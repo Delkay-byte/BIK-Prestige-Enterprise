@@ -1,7 +1,7 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 import { getSusuDashboardStats, getAdminCollectorBreakdown } from "@/lib/actions/susu-dashboard.actions";
 import CediAmount from "@/components/CediAmount";
 import InfoTooltip from "@/components/InfoTooltip";
@@ -37,6 +37,7 @@ interface CollectorBreakdown {
 }
 
 export default function SusuAdminOverviewPage() {
+  const handleRedirect = useRedirectHandler();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [collectorBreakdown, setCollectorBreakdown] = useState<CollectorBreakdown[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +51,7 @@ export default function SusuAdminOverviewPage() {
       ]);
       setStats(data);
       setCollectorBreakdown(breakdown);
-    } catch (err) { if (isRedirectError(err)) throw err;
+    } catch (err) { if (handleRedirect(err, setError, "Failed to load dashboard data")) return;
       setError("Failed to load dashboard data");
     } finally {
       setLoading(false);

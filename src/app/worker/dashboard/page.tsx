@@ -1,5 +1,5 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -18,6 +18,7 @@ interface UserInfo { userId: string; email: string; role: string; locationId?: s
 interface FullUser { id: string; fullName: string; email: string; location?: { id: string; name: string; code: string } | null; locationId?: string; }
 
 export default function WorkerDashboardPage() {
+  const handleRedirect = useRedirectHandler();
   const router = useRouter();
   const [userName, setUserName] = useState("");
   const [locationName, setLocationName] = useState("");
@@ -46,7 +47,7 @@ export default function WorkerDashboardPage() {
 
       const accountsData = await getWorkerDailyAccounts();
       setAccounts(accountsData as unknown as DailyAccount[]);
-    } catch (err) { if (isRedirectError(err)) throw err; setError("Failed to load dashboard"); }
+    } catch (err) { if (handleRedirect(err, setError, "Failed to load dashboard")) return; }
     finally { setLoading(false); }
   }
 
@@ -62,7 +63,7 @@ export default function WorkerDashboardPage() {
         const account = result.data as { id: string };
         router.push(`/worker/daily/${account.id}`);
       } else { setError(result.error || "Failed to create daily account"); }
-    } catch (err) { if (isRedirectError(err)) throw err; setError("An unexpected error occurred"); }
+    } catch (err) { if (handleRedirect(err, setError, "An unexpected error occurred")) return; }
     finally { setCreating(false); }
   }
 

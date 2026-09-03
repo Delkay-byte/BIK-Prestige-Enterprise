@@ -1,7 +1,7 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 import {
   getCustomers,
   createCustomer,
@@ -39,6 +39,7 @@ interface Collector {
 }
 
 export default function SusuCustomersPage() {
+  const handleRedirect = useRedirectHandler();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [collectors, setCollectors] = useState<Collector[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,9 +72,7 @@ export default function SusuCustomersPage() {
       setCustomers(customerData.customers as unknown as Customer[]);
       setCollectors(collectorData as unknown as Collector[]);
     } catch (err) {
-      // Re-throw Next.js redirect errors so the router handles them
-      if (err && typeof err === "object" && "digest" in err) throw err;
-      setError("Failed to load data");
+      if (handleRedirect(err, setError, "Failed to load data")) return;
     } finally {
       setLoading(false);
     }
@@ -99,9 +98,7 @@ export default function SusuCustomersPage() {
       } else {
         setError(result.error || "Failed to create customer");
       }
-    } catch (err) { if (isRedirectError(err)) throw err;
-      setError("An unexpected error occurred");
-    } finally {
+    } catch (err) { if (handleRedirect(err, setError, "An unexpected error occurred")) return;
       setSubmitting(false);
     }
   }
@@ -120,8 +117,7 @@ export default function SusuCustomersPage() {
       } else {
         setError(result.error || "Failed to assign");
       }
-    } catch (err) { if (isRedirectError(err)) throw err;
-      setError("An unexpected error occurred");
+    } catch (err) { if (handleRedirect(err, setError, "An unexpected error occurred")) return;
     }
   }
 

@@ -1,7 +1,7 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 import { getCollectorDashboardStats } from "@/lib/actions/susu-dashboard.actions";
 import { recordContribution } from "@/lib/actions/susu-contribution.actions";
 import { registerCustomerByCollector } from "@/lib/actions/susu-collector.actions";
@@ -79,6 +79,7 @@ function formatTime(isoString: string): string {
 // The server checks enrollment status before allowing offline operations.
 
 export default function CollectorDashboardPage() {
+  const handleRedirect = useRedirectHandler();
   const [data, setData] = useState<DashboardData | null>(null);
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -290,8 +291,7 @@ export default function CollectorDashboardPage() {
         const dashboardData = await getCollectorDashboardStats(authUser.userId);
         setData(dashboardData as DashboardData | null);
       }
-    } catch (err) { if (isRedirectError(err)) throw err;
-      setError("Failed to load dashboard");
+    } catch (err) { if (handleRedirect(err, setError, "Failed to load dashboard")) return;
     } finally { setLoading(false); }
   }
 
@@ -353,8 +353,7 @@ export default function CollectorDashboardPage() {
       } else {
         setCollectError("Unable to record. Check your connection and try again.");
       }
-    } catch (err) { if (isRedirectError(err)) throw err;
-      setCollectError("Something went wrong. Please try again.");
+    } catch (err) { if (handleRedirect(err, setCollectError, "Something went wrong. Please try again.")) return;
     } finally { setSubmitting(false); }
   }
 
@@ -401,8 +400,7 @@ export default function CollectorDashboardPage() {
       } else {
         setRegError(result.error || "Failed to register customer");
       }
-    } catch (err) { if (isRedirectError(err)) throw err;
-      setRegError("Something went wrong. Please try again.");
+    } catch (err) { if (handleRedirect(err, setRegError, "Something went wrong. Please try again.")) return;
     } finally {
       setRegSubmitting(false);
     }

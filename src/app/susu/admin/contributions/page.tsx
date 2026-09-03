@@ -5,7 +5,7 @@ import { getCollectors } from "@/lib/actions/susu-collector.actions";
 import { formatCedi, formatDate, formatDateTime } from "@/lib/utils";
 import CediAmount from "@/components/CediAmount";
 import { useEffect, useState } from "react";
-import { isRedirectError } from "@/lib/errors";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 import SmartSearch from "@/components/SmartSearch";
 
 interface Contribution {
@@ -44,6 +44,7 @@ interface CollectorOption {
 }
 
 export default function SusuContributionsPage() {
+  const handleRedirect = useRedirectHandler();
   const [contributions, setContributions] = useState<Contribution[]>([]);
   const [pagination, setPagination] = useState<{ page: number; totalPages: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,8 +109,7 @@ export default function SusuContributionsPage() {
       });
       setContributions(result.contributions as unknown as Contribution[]);
       setPagination(result.pagination);
-    } catch (err) { if (isRedirectError(err)) throw err;
-      /* ignore */
+    } catch (err) { if (handleRedirect(err, setError, "Failed to load contributions")) return;
     } finally {
       setLoading(false);
     }
@@ -119,8 +119,7 @@ export default function SusuContributionsPage() {
     try {
       const data = await getCollectors();
       setCollectors(data as unknown as CollectorOption[]);
-    } catch (err) { if (isRedirectError(err)) throw err;
-      /* ignore */
+    } catch (err) { if (handleRedirect(err, setError, "Failed to load collectors")) return;
     }
   }
 
@@ -133,8 +132,7 @@ export default function SusuContributionsPage() {
     try {
       const results = await searchCustomers(query);
       setSearchResults(results as unknown as CustomerSearchResult[]);
-    } catch (err) { if (isRedirectError(err)) throw err;
-      /* ignore */
+    } catch (err) { if (handleRedirect(err, setError, "Search failed")) return;
     }
   }
 
@@ -191,7 +189,7 @@ export default function SusuContributionsPage() {
       } else {
         setError(result.error || "Failed to record contribution");
       }
-    } catch (err) { if (isRedirectError(err)) throw err;
+    } catch (err) { if (handleRedirect(err, setError, "An unexpected error occurred")) return;
       setError("An unexpected error occurred");
     } finally {
       setSubmitting(false);

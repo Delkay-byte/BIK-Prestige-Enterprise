@@ -1,7 +1,7 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 import { getWorkers, createWorker, toggleWorkerStatus } from "@/lib/actions/worker.actions";
 import { getActiveLocations } from "@/lib/actions/location.actions";
 import PasswordInput from "@/components/PasswordInput";
@@ -14,6 +14,7 @@ interface Worker {
 interface Location { id: string; name: string; code: string; }
 
 export default function WorkersPage() {
+  const handleRedirect = useRedirectHandler();
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,7 +30,7 @@ export default function WorkersPage() {
     try {
       const [workersData, locationsData] = await Promise.all([getWorkers(), getActiveLocations()]);
       setWorkers(workersData as unknown as Worker[]); setLocations(locationsData as Location[]);
-    } catch (err) { if (isRedirectError(err)) throw err; setError("Failed to load data"); } finally { setLoading(false); }
+    } catch (err) { if (handleRedirect(err, setError, "Failed to load data")) return; } finally { setLoading(false); }
   }
 
   async function handleCreate(formData: FormData) {
@@ -38,7 +39,7 @@ export default function WorkersPage() {
       const result = await createWorker(formData);
       if (result.success) { setSuccess("Temporary password created — the worker must change it after first login. Share these credentials securely."); setShowForm(false); loadData(); }
       else setError(result.error || "Failed to create worker");
-    } catch (err) { if (isRedirectError(err)) throw err; setError("An unexpected error occurred"); } finally { setSubmitting(false); }
+    } catch (err) { if (handleRedirect(err, setError, "An unexpected error occurred")) return; } finally { setSubmitting(false); }
   }
 
   async function handleToggleStatus(workerId: string, currentStatus: string) {

@@ -1,7 +1,7 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 import { getContributions } from "@/lib/actions/susu-contribution.actions";
 import { getWithdrawals } from "@/lib/actions/susu-withdrawal.actions";
 import { formatDate, formatDateTime } from "@/lib/utils";
@@ -10,6 +10,7 @@ import CediAmount from "@/components/CediAmount";
 type Tab = "contributions" | "withdrawals";
 
 export default function SusuReportsPage() {
+  const handleRedirect = useRedirectHandler();
   const [tab, setTab] = useState<Tab>("contributions");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -34,6 +35,7 @@ export default function SusuReportsPage() {
     cycle: { cycleNumber: number };
   }>>([]);
   const [pagination, setPagination] = useState<{ page: number; totalPages: number; total: number } | null>(null);
+  const [error, setError] = useState("");
 
   async function loadData() {
     setLoading(true);
@@ -57,7 +59,7 @@ export default function SusuReportsPage() {
         setWithdrawals(result.withdrawals as unknown as typeof withdrawals);
         setPagination(result.pagination);
       }
-    } catch (err) { if (isRedirectError(err)) throw err;
+    } catch (err) { if (handleRedirect(err, setError, "Failed to load data")) return;
       /* ignore */    } finally {
       setLoading(false);
     }
@@ -123,6 +125,13 @@ export default function SusuReportsPage() {
           📥 Export CSV
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+          {error}
+          <button onClick={() => setError("")} className="ml-2">✕</button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6">

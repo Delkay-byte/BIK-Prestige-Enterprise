@@ -1,7 +1,7 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 import { getWithdrawals, processWithdrawal } from "@/lib/actions/susu-withdrawal.actions";
 import { searchCustomers } from "@/lib/actions/susu-customer.actions";
 import { formatCedi, formatDateTime } from "@/lib/utils";
@@ -37,6 +37,7 @@ interface CustomerSearchResult {
 }
 
 export default function SusuWithdrawalsPage() {
+  const handleRedirect = useRedirectHandler();
   const [withdrawals, setWithdrawals] = useState<WithdrawalRecord[]>([]);
   const [pagination, setPagination] = useState<{ page: number; totalPages: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,8 +65,7 @@ export default function SusuWithdrawalsPage() {
       const result = await getWithdrawals({ page, limit: 15 });
       setWithdrawals(result.withdrawals as unknown as WithdrawalRecord[]);
       setPagination(result.pagination);
-    } catch (err) { if (isRedirectError(err)) throw err;
-      /* ignore */
+    } catch (err) { if (handleRedirect(err, setError, "Failed to load withdrawals")) return;
     } finally {
       setLoading(false);
     }
@@ -80,8 +80,7 @@ export default function SusuWithdrawalsPage() {
     try {
       const results = await searchCustomers(query);
       setSearchResults(results as unknown as CustomerSearchResult[]);
-    } catch (err) { if (isRedirectError(err)) throw err;
-      /* ignore */
+    } catch (err) { if (handleRedirect(err, setError, "Search failed")) return;
     }
   }
 
@@ -136,7 +135,7 @@ export default function SusuWithdrawalsPage() {
       } else {
         setError(result.error || "Failed to process withdrawal");
       }
-    } catch (err) { if (isRedirectError(err)) throw err;
+    } catch (err) { if (handleRedirect(err, setError, "An unexpected error occurred")) return;
       setError("An unexpected error occurred");
     } finally {
       setSubmitting(false);

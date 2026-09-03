@@ -1,5 +1,5 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 
 import { useEffect, useState } from "react";
 import { getDailyAccounts } from "@/lib/actions/daily-account.actions";
@@ -30,12 +30,13 @@ export default function ReportsPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
+  const handleRedirect = useRedirectHandler();
 
   async function loadLocations() {
     try {
       const data = await getLocations();
       setLocations((data as Array<{ id: string; name: string; code: string }>).map((l) => ({ id: l.id, name: l.name, code: l.code })));
-    } catch (err) { if (isRedirectError(err)) throw err; /* ignore */ }
+    } catch (err) { if (handleRedirect(err, () => {}, "")) return; }
   }
 
   async function loadAccounts() {
@@ -43,7 +44,7 @@ export default function ReportsPage() {
     try {
       const result = await getDailyAccounts({ page, limit: 15, locationId: locationId || undefined, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined });
       setAccounts(result.accounts as unknown as Account[]); setPagination(result.pagination);
-    } catch (err) { if (isRedirectError(err)) throw err; /* ignore */ } finally { setLoading(false); }
+    } catch (err) { if (handleRedirect(err, () => {}, "")) return; } finally { setLoading(false); }
   }
 
   useEffect(() => { loadLocations(); }, []);

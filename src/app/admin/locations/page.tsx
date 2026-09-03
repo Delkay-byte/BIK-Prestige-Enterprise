@@ -1,5 +1,5 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 
 import { useEffect, useState } from "react";
 import { getLocations, createLocation, toggleLocationStatus } from "@/lib/actions/location.actions";
@@ -20,6 +20,7 @@ export default function LocationsPage() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [filter, setFilter] = useState("all");
+  const handleRedirect = useRedirectHandler();
 
   useEffect(() => { loadLocations(); }, []);
 
@@ -50,7 +51,7 @@ export default function LocationsPage() {
       const result = await createLocation(formData);
       if (result.success) { setSuccess("Location created successfully"); setShowForm(false); loadLocations(); }
       else setError(result.error || "Failed to create location");
-    } catch (err) { if (isRedirectError(err)) throw err; setError("An unexpected error occurred"); }
+    } catch (err) { if (handleRedirect(err, setError, "An unexpected error occurred")) return; }
     finally { setSubmitting(false); }
   }
 
@@ -60,7 +61,7 @@ export default function LocationsPage() {
       const result = await toggleLocationStatus(locationId, newStatus);
       if (result.success) loadLocations();
       else setError(result.error || "Failed to update location");
-    } catch (err) { if (isRedirectError(err)) throw err; setError("An unexpected error occurred"); }
+    } catch (err) { if (handleRedirect(err, setError, "An unexpected error occurred")) return; }
   }
 
   const filteredLocations = locations.filter((loc) => {

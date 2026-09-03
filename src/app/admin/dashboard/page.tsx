@@ -1,7 +1,7 @@
 "use client";
-import { isRedirectError } from "@/lib/errors";
 
 import { useEffect, useState } from "react";
+import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 import { getAdminDashboardStats } from "@/lib/actions/daily-account.actions";
 import { getSusuDashboardStats } from "@/lib/actions/susu-dashboard.actions";
 import { getGreeting, getDailyQuote } from "@/lib/utils";
@@ -39,6 +39,7 @@ interface SusuStats {
 }
 
 export default function AdminDashboardPage() {
+  const handleRedirect = useRedirectHandler();
   const [momoStats, setMomoStats] = useState<MoMoStats | null>(null);
   const [susuStats, setSusuStats] = useState<SusuStats | null>(null);
   const [userName, setUserName] = useState("Admin");
@@ -61,7 +62,7 @@ export default function AdminDashboardPage() {
       ]);
       setMomoStats(momo);
       setSusuStats(susu);
-    } catch (err) { if (isRedirectError(err)) throw err;
+    } catch (err) { if (handleRedirect(err, setError, "Failed to load dashboard data")) return;
       setError("Failed to load dashboard data");
     } finally {
       setLoading(false);
