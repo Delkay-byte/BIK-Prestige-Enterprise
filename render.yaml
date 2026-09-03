@@ -10,7 +10,7 @@ services:
     name: bik-prestige
     runtime: node
     plan: free
-    buildCommand: npm install --include=dev && npx prisma generate --schema=prisma/schema-pg.prisma && npx prisma db push --schema=prisma/schema-pg.prisma && npm run build
+    buildCommand: npm install --include=dev && npx prisma generate --schema=prisma/schema-pg.prisma && npx prisma migrate deploy --schema=prisma/schema-pg.prisma && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
