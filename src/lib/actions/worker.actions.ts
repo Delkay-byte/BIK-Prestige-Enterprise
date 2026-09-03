@@ -254,39 +254,40 @@ export async function searchStaff(query: string) {
 
   const normalizedQuery = query.trim().toLowerCase();
 
-  // Fetch broader set for SQLite case-insensitive matching
+  // Fetch all active staff and filter in-memory for case-insensitive matching.
+  // Prisma `contains` is case-sensitive LIKE on PostgreSQL (SQLite's LIKE is
+  // ASCII case-insensitive), and `mode: "insensitive"` is rejected by the
+  // SQLite connector, so a DB-level prefilter would miss mixed-case matches in
+  // production. Pilot scale is small — filtering in memory is safe.
   const candidates = await db.user.findMany({
     where: {
       status: "active",
       role: { in: ["admin", "worker", "collector"] },
-      OR: [
-        { fullName: { contains: normalizedQuery } },
-        { email: { contains: normalizedQuery } },
-        { phone: { contains: normalizedQuery } },
-        { fullName: { contains: normalizedQuery.toUpperCase() } },
-        { email: { contains: normalizedQuery.toUpperCase() } },
-      ],
     },
     select: {
       id: true,
       fullName: true,
       email: true,
+      phone: true,
       role: true,
     },
-    take: 20,
+    take: 200,
     orderBy: { fullName: "asc" },
   });
 
-  // Deduplicate and apply case-insensitive filter
   const seen = new Set<string>();
-  return candidates.filter((u) => {
-    if (seen.has(u.id)) return false;
-    const nameLower = u.fullName.toLowerCase();
-    const emailLower = (u.email || "").toLowerCase();
-    const matches =
-      nameLower.includes(normalizedQuery) ||
-      emailLower.includes(normalizedQuery);
-    if (matches) seen.add(u.id);
-    return matches;
-  }).slice(0, 10);
+  return candidates
+    .filter((u) => {
+      if (seen.has(u.id)) return false;
+      const nameLower = u.fullName.toLowerCase();
+      const emailLower = (u.email || "").toLowerCase();
+      const phoneLower = (u.phone || "").toLowerCase();
+      const matches =
+        nameLower.includes(normalizedQuery) ||
+        emailLower.includes(normalizedQuery) ||
+        phoneLower.includes(normalizedQuery);
+      if (matches) seen.add(u.id);
+      return matches;
+    })
+    .slice(0, 10);
 }

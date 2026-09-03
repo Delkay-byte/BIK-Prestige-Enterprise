@@ -369,14 +369,13 @@ export async function searchStaff(query: string) {
 
   const normalizedQuery = query.trim().toLowerCase();
 
-  // For SQLite, fetch broader results and filter in-memory for case-insensitive matching
+  // Fetch all active staff and filter in-memory for case-insensitive matching.
+  // Prisma `contains` is case-sensitive LIKE on PostgreSQL (SQLite's LIKE is
+  // ASCII case-insensitive), and `mode: "insensitive"` is rejected by the
+  // SQLite connector, so a DB-level prefilter would miss mixed-case matches in
+  // production. Pilot scale is small — filtering in memory is safe.
   const candidates = await db.user.findMany({
     where: {
-      OR: [
-        { fullName: { contains: normalizedQuery } },
-        { email: { contains: normalizedQuery } },
-        { phone: { contains: normalizedQuery } },
-      ],
       status: "active",
       role: { in: ["admin", "worker", "collector"] },
     },
@@ -387,10 +386,9 @@ export async function searchStaff(query: string) {
       phone: true,
       role: true,
     },
-    take: 50,
+    take: 200,
   });
 
-  // Filter in-memory for case-insensitive matching
   return candidates
     .filter((u) => {
       const nameLower = u.fullName.toLowerCase();
@@ -418,17 +416,13 @@ export async function searchCustomers(query: string) {
   const normalizedQuery = query.trim().toLowerCase();
   const phoneCandidates = normalizeGhanaPhone(query);
 
-  // For SQLite, fetch broader results and filter in-memory for case-insensitive matching
+  // Fetch all active customers and filter in-memory for case-insensitive matching.
+  // Prisma `contains` is case-sensitive LIKE on PostgreSQL (SQLite's LIKE is
+  // ASCII case-insensitive), and `mode: "insensitive"` is rejected by the
+  // SQLite connector, so a DB-level prefilter would miss mixed-case matches in
+  // production. Pilot scale is small — filtering in memory is safe.
   const candidates = await db.customer.findMany({
-    where: {
-      OR: [
-        { fullName: { contains: normalizedQuery } },
-        { customerId: { contains: normalizedQuery } },
-        { phone: { contains: normalizedQuery } },
-        ...(phoneCandidates.length ? [{ phone: { in: phoneCandidates } }] : []),
-      ],
-      status: "active",
-    },
+    where: { status: "active" },
     include: {
       accounts: {
         where: { status: "active" },
@@ -437,10 +431,9 @@ export async function searchCustomers(query: string) {
         },
       },
     },
-    take: 50,
+    take: 200,
   });
 
-  // Filter in-memory for case-insensitive matching
   const seen = new Set<string>();
   return candidates
     .filter((c) => {
@@ -451,7 +444,8 @@ export async function searchCustomers(query: string) {
       const matches =
         nameLower.includes(normalizedQuery) ||
         idLower.includes(normalizedQuery) ||
-        phoneLower.includes(normalizedQuery);
+        phoneLower.includes(normalizedQuery) ||
+        phoneCandidates.some((p) => (c.phone || "").replace(/[^\d]/g, "").endsWith(p.replace(/[^\d]/g, "")));
       if (matches) seen.add(c.id);
       return matches;
     })
