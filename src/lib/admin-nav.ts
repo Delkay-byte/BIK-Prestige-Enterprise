@@ -34,6 +34,7 @@ export const navSections: { title: string; items: NavItem[] }[] = [
   {
     title: "Administration",
     items: [
+      { href: "/admin/staff", label: "Staff", icon: "👤" },
       { href: "/admin/audit", label: "Activity History", icon: "📝" },
       { href: "/admin/settings", label: "Settings", icon: "⚙️" },
     ],

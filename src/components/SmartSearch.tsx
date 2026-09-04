@@ -38,6 +38,9 @@ export default function SmartSearch({
   const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  // Tracks whether the user is actively editing the input after a selection.
+  // When true, the input shows the typed query instead of the selected label.
+  const [isEditing, setIsEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -99,6 +102,7 @@ export default function SmartSearch({
       if (highlightedIndex >= 0 && highlightedIndex < results.length) {
         onSelect(results[highlightedIndex]);
         setQuery(results[highlightedIndex].label);
+        setIsEditing(false);
         setShowResults(false);
       }
     } else if (event.key === "Escape") {
@@ -109,9 +113,12 @@ export default function SmartSearch({
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     setQuery(value);
+    setIsEditing(true);
     setShowResults(true);
-    if (selectedOption && value !== selectedOption.label) {
-      // Clear selection if user types something different
+    // Only clear selection when the input is explicitly emptied.
+    // Typing a different search query updates results but preserves the
+    // current selection until the user explicitly replaces it.
+    if (selectedOption && value === "") {
       onClear?.();
     }
   };
@@ -119,6 +126,7 @@ export default function SmartSearch({
   const handleOptionClick = (option: SearchOption) => {
     onSelect(option);
     setQuery(option.label);
+    setIsEditing(false);
     setShowResults(false);
     inputRef.current?.focus();
   };
@@ -129,7 +137,7 @@ export default function SmartSearch({
     }
   };
 
-  const displayValue = selectedOption?.label || query;
+  const displayValue = isEditing || !selectedOption ? query : selectedOption.label;
 
   return (
     <div className={`relative ${className}`}>

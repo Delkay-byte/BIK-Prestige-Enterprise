@@ -105,11 +105,22 @@ export async function recordContribution(params: {
       if (recordedByUser.status !== "active") {
         return { success: false, error: "Selected recorder staff member is not active" };
       }
+      if (!["admin", "worker", "collector"].includes(recordedByUser.role)) {
+        return { success: false, error: "Selected recorder is not an authorized staff member" };
+      }
       recordedById = clientRecordedById;
     } else {
       recordedById = admin!.userId;
     }
   }
+
+  // ── 3b. Resolve authoritative recordedByName from validated recordedById ──
+  // Never trust free-text client input for identity resolution.
+  const recorderUser = await db.user.findUnique({
+    where: { id: recordedById },
+    select: { fullName: true },
+  });
+  const effectiveRecordedByName = recorderUser?.fullName || recordedByName?.trim() || null;
 
   // ── 4. Fetch account and verify ─────────────────────────────────────
   const account = await db.susuAccount.findUnique({
@@ -152,6 +163,7 @@ export async function recordContribution(params: {
 
   // ── 6. Determine receivedById for direct_office channel ──────────────
   let effectiveReceivedById: string | null = null;
+  let effectiveReceivedByName: string | null = null;
   if (channel === "direct_office") {
     if (receivedById) {
       // Verify the receivedById is an authorized staff member
@@ -164,10 +176,21 @@ export async function recordContribution(params: {
       if (receivedByUser.status !== "active") {
         return { success: false, error: "Selected staff member is not active" };
       }
+      if (!["admin", "worker", "collector"].includes(receivedByUser.role)) {
+        return { success: false, error: "Selected receiver is not an authorized staff member" };
+      }
       effectiveReceivedById = receivedById;
+      // Resolve authoritative name from validated user — never trust free-text input
+      effectiveReceivedByName = receivedByUser.fullName;
     } else {
       // Default to the recording user (the admin entering the payment)
       effectiveReceivedById = recordedById;
+      // Resolve the name from the recordedBy user
+      const defaultReceiver = await db.user.findUnique({
+        where: { id: recordedById },
+        select: { fullName: true },
+      });
+      effectiveReceivedByName = defaultReceiver?.fullName || null;
     }
   }
 
@@ -186,9 +209,9 @@ export async function recordContribution(params: {
         channel,
         collectorId: effectiveCollectorId,
         recordedById,
-        recordedByName: recordedByName?.trim() || null,
+        recordedByName: effectiveRecordedByName,
         receivedById: effectiveReceivedById,
-        receivedByName: receivedByName?.trim() || null,
+        receivedByName: effectiveReceivedByName,
         referenceId,
         notes,
       },
@@ -247,9 +270,9 @@ export async function recordContribution(params: {
       channel,
       collectorId: effectiveCollectorId,
       receivedById: effectiveReceivedById,
-      receivedByName: params.receivedByName ?? null,
+      receivedByName: effectiveReceivedByName,
       recordedById, // Business attribution — the staff selected as recorder
-      recordedByName: recordedByName?.trim() || null,
+      recordedByName: effectiveRecordedByName,
       authenticatedActorId: user.userId, // Explicit audit trail
       daysAllocated: result.daysAllocated,
       allocatedAmount: result.allocatedAmount,

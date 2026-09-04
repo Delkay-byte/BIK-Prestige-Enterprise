@@ -404,7 +404,7 @@ export async function searchStaff(query: string) {
     .map((u) => ({
       id: u.id,
       label: u.fullName,
-      subLabel: `${u.role} • ${u.email}${u.phone ? ` • ${u.phone}` : ""}`,
+      subLabel: `${u.role} • ${u.email}${u.phone ? ` • ${u.phone}` : ""} • ID: ${u.id.slice(0, 12)}…`,
     }));
 }
 

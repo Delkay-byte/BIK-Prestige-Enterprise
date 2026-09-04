@@ -173,7 +173,9 @@ export default function SusuContributionsPage() {
         channel,
         collectorId: channel === "collector" ? selectedCollector : undefined,
         receivedById: channel === "direct_office" ? receivedById : undefined,
+        receivedByName: channel === "direct_office" ? receivedByName : undefined,
         recordedById: channel === "direct_office" ? recordedById : undefined,
+        recordedByName: channel === "direct_office" ? recordedByName : undefined,
         notes: notes || undefined,
       });
 
