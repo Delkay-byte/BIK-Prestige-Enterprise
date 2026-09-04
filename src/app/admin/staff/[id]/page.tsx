@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { useRedirectHandler } from "@/hooks/useRedirectHandler";
 import { getStaffById, updateStaff, resetStaffPassword, toggleStaffStatus } from "@/lib/actions/staff.actions";
 import { formatDateTime } from "@/lib/utils";
@@ -123,9 +124,9 @@ export default function StaffDetailPage() {
     return (
       <div className="text-center py-20">
         <p className="text-gray-500">Staff member not found.</p>
-        <a href="/admin/staff" className="text-blue-600 hover:underline mt-2 inline-block">
+        <Link href="/admin/staff" className="text-blue-600 hover:underline mt-2 inline-block">
           ← Back to Staff Directory
-        </a>
+        </Link>
       </div>
     );
   }
@@ -134,7 +135,7 @@ export default function StaffDetailPage() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <a href="/admin/staff" className="text-sm text-blue-600 hover:underline">← Staff Directory</a>
+          <Link href="/admin/staff" className="text-sm text-blue-600 hover:underline">← Staff Directory</Link>
           <h1 className="text-2xl font-bold text-gray-900 mt-2">{staff.fullName}</h1>
           <p className="text-gray-500 mt-1">{ROLE_LABELS[staff.role] || staff.role}</p>
         </div>

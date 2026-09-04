@@ -46,7 +46,7 @@ export async function recordContribution(params: {
   recordedByName?: string; // Free-text display name of the person recording the payment
   notes?: string;
 }): Promise<ActionResponse> {
-  const { accountId, amount, channel, collectorId, receivedById, receivedByName, recordedById: clientRecordedById, recordedByName, notes } = params;
+  const { accountId, amount, channel, collectorId, receivedById, recordedById: clientRecordedById, recordedByName, notes } = params;
 
   // ── 1. Authenticate ─────────────────────────────────────────────────
   // Admin cookie first, then the Susu collector session. The account that
