@@ -26,6 +26,7 @@ export const navSections: { title: string; items: NavItem[] }[] = [
       { href: "/susu/admin/contributions", label: "Contributions", icon: "💵" },
       { href: "/susu/admin/withdrawals", label: "Withdrawals", icon: "🏧" },
       { href: "/susu/admin/remittances", label: "Money Handed In", icon: "🏦" },
+      { href: "/susu/admin/history", label: "Money & History", icon: "📒" },
       { href: "/susu/admin/reports", label: "Reports", icon: "📑" },
     ],
   },

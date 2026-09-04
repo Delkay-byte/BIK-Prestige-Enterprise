@@ -207,6 +207,7 @@ export default function SusuContributionsPage() {
       "Days Covered",
       "Channel",
       "Received By",
+      "Recorded By",
       "Notes",
     ];
     const rows = contributions.map((c) => [
@@ -220,6 +221,7 @@ export default function SusuContributionsPage() {
       c.channel === "collector"
         ? c.collector?.user?.fullName || "—"
         : c.receivedByName || c.receivedBy?.fullName || "—",
+      c.recordedByName || c.recordedBy?.fullName || "Not recorded",
       c.notes || "",
     ]);
     const csv = [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
