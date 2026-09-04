@@ -14,6 +14,7 @@ export const navSections: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/admin/locations", label: "Locations", icon: "📍" },
       { href: "/admin/workers", label: "Workers", icon: "👥" },
+      { href: "/admin/history", label: "Money & History", icon: "📒" },
       { href: "/admin/reports", label: "Reports", icon: "📋" },
     ],
   },

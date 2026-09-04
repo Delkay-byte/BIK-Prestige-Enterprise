@@ -42,10 +42,11 @@ export async function recordContribution(params: {
   collectorId?: string; // Admin-only: manually selected collector. Ignored for collector role.
   receivedById?: string; // Admin-only for direct_office: staff (User) who received the money
   receivedByName?: string; // Free-text name of the staff who physically received the money (office)
+  recordedById?: string; // Admin-only for direct_office: staff (User) who recorded the payment
   recordedByName?: string; // Free-text display name of the person recording the payment
   notes?: string;
 }): Promise<ActionResponse> {
-  const { accountId, amount, channel, collectorId, receivedById, receivedByName, recordedByName, notes } = params;
+  const { accountId, amount, channel, collectorId, receivedById, receivedByName, recordedById: clientRecordedById, recordedByName, notes } = params;
 
   // ── 1. Authenticate ─────────────────────────────────────────────────
   // Admin cookie first, then the Susu collector session. The account that
@@ -95,7 +96,19 @@ export async function recordContribution(params: {
     if (!isAdmin) {
       return { success: false, error: "Only administrators can record office contributions" };
     }
-    recordedById = admin!.userId;
+    // Use the selected staff recorder if provided, otherwise default to the authenticated admin
+    if (clientRecordedById) {
+      const recordedByUser = await db.user.findUnique({ where: { id: clientRecordedById } });
+      if (!recordedByUser) {
+        return { success: false, error: "Selected recorder staff member not found" };
+      }
+      if (recordedByUser.status !== "active") {
+        return { success: false, error: "Selected recorder staff member is not active" };
+      }
+      recordedById = clientRecordedById;
+    } else {
+      recordedById = admin!.userId;
+    }
   }
 
   // ── 4. Fetch account and verify ─────────────────────────────────────
@@ -221,8 +234,10 @@ export async function recordContribution(params: {
   });
 
   // ── 8. Audit log ────────────────────────────────────────────────────
+  // The audit log preserves the authenticated actor (who submitted the request)
+  // separately from the business attribution (who received/recorded the payment).
   await createAuditLog({
-    userId: recordedById,
+    userId: user.userId, // Authenticated actor — always from the session
     action: "susu.contribution_recorded",
     entityType: "contribution",
     entityId: result.contribution.id,
@@ -233,6 +248,9 @@ export async function recordContribution(params: {
       collectorId: effectiveCollectorId,
       receivedById: effectiveReceivedById,
       receivedByName: params.receivedByName ?? null,
+      recordedById, // Business attribution — the staff selected as recorder
+      recordedByName: recordedByName?.trim() || null,
+      authenticatedActorId: user.userId, // Explicit audit trail
       daysAllocated: result.daysAllocated,
       allocatedAmount: result.allocatedAmount,
       referenceId,

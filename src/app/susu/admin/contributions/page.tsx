@@ -67,12 +67,11 @@ export default function SusuContributionsPage() {
   const [currentUser, setCurrentUser] = useState<{ id: string; fullName: string } | null>(null);
   const [receivedById, setReceivedById] = useState("");
   const [receivedByName, setReceivedByName] = useState("");
+  const [recordedById, setRecordedById] = useState("");
+  const [recordedByName, setRecordedByName] = useState("");
 
-  // Prefill "Recorded By" with the account currently being used to enter the
-  // payment (the admin session — this page lives under /susu/admin/*). The
-  // field stays editable so the actual person recording can type their name;
-  // the server still anchors recordedById to the authenticated session for
-  // audit integrity.
+  // Load current user and prefill Recorded By with the authenticated staff.
+  // The field remains changeable to another authorized staff member.
   useEffect(() => {
     async function loadCurrentUser() {
       try {
@@ -82,6 +81,9 @@ export default function SusuContributionsPage() {
           if (authUser?.userId) {
             const fullName = authUser.fullName || "Current User";
             setCurrentUser({ id: authUser.userId, fullName });
+            // Preselect Recorded By with current user (changeable)
+            setRecordedById(authUser.userId);
+            setRecordedByName(fullName);
           }
         }
       } catch {
@@ -155,6 +157,11 @@ export default function SusuContributionsPage() {
       return;
     }
 
+    if (channel === "direct_office" && !recordedById) {
+      setError("Please select the staff member who recorded this payment.");
+      return;
+    }
+
     setSubmitting(true);
     setError("");
     setSuccess("");
@@ -166,7 +173,7 @@ export default function SusuContributionsPage() {
         channel,
         collectorId: channel === "collector" ? selectedCollector : undefined,
         receivedById: channel === "direct_office" ? receivedById : undefined,
-        recordedByName: currentUser?.fullName || undefined,
+        recordedById: channel === "direct_office" ? recordedById : undefined,
         notes: notes || undefined,
       });
 
@@ -185,6 +192,14 @@ export default function SusuContributionsPage() {
         setNotes("");
         setReceivedById("");
         setReceivedByName("");
+        // Reset Recorded By to current user for next entry
+        if (currentUser) {
+          setRecordedById(currentUser.id);
+          setRecordedByName(currentUser.fullName);
+        } else {
+          setRecordedById("");
+          setRecordedByName("");
+        }
         loadContributions();
       } else {
         setError(result.error || "Failed to record contribution");
@@ -385,13 +400,26 @@ export default function SusuContributionsPage() {
                   </p>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Recorded By</label>
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                    <div className="font-medium text-gray-900">{currentUser?.fullName || "Loading..."}</div>
-                    <p className="form-hint text-xs mt-1">
-                      This is the account currently being used to enter the payment. It cannot be changed.
-                    </p>
-                  </div>
+                  <label className="form-label">Recorded By *</label>
+                  <SmartSearch
+                    label=""
+                    placeholder="Search staff by name, email, or phone..."
+                    searchFn={searchStaff}
+                    onSelect={(option) => {
+                      setRecordedById(option.id);
+                      setRecordedByName(option.label);
+                    }}
+                    onClear={() => {
+                      setRecordedById("");
+                      setRecordedByName("");
+                    }}
+                    selectedOption={recordedById ? { id: recordedById, label: recordedByName } : null}
+                    minQueryLength={2}
+                    debounceMs={200}
+                  />
+                  <p className="form-hint text-xs mt-1">
+                    The staff member who recorded this payment in the system.
+                  </p>
                 </div>
               </>
             )}
@@ -417,6 +445,14 @@ export default function SusuContributionsPage() {
               onClick={() => {
                 setShowForm(false);
                 setSelectedCustomer(null);
+                // Reset Recorded By to current user for next entry
+                if (currentUser) {
+                  setRecordedById(currentUser.id);
+                  setRecordedByName(currentUser.fullName);
+                } else {
+                  setRecordedById("");
+                  setRecordedByName("");
+                }
               }}
               className="btn btn-secondary"
             >
